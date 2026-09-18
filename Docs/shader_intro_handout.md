@@ -29,7 +29,38 @@ DirectX 12（DX12）の世界は「泥臭い」手続きの連続です。Unity 
 
 DX12の「泥臭い」管理をUnityが肩代わりしてくれるおかげで、クリエイターはメモリの生存期間やレジスタの競合に頭を悩ませる必要がありません。私たちは、純粋な**「見た目のロジック」**に100%集中できるのです。
 
-### 3. 図解：グラフィックスパイプラインの旅
+### 3. グラフィックスパイプラインとは
+
+#### 3.1. 定義：グラフィックスパイプラインとは何か
+**グラフィックスパイプライン（Graphics Pipeline）** とは、CPUから送られてきた3D空間のデータ（頂点座標、法線、テクスチャ座標など）を受け取り、画面（ディスプレイ）に表示する**2Dのピクセル群（画像）へと変換・合成する一連の処理工程（流れ作業・バケツリレー）**のことです。
+
+工場の一本化された組み立てラインのように、前の工程の出力が次の工程の入力となり、最終的な絵を作り上げます。
+
+---
+
+#### 3.2. 主なレンダリング方式の特徴と分類
+
+グラフィックスパイプラインを「どのように構成・実行するか」によって、大きく以下のレンダリング方式に分かれます。
+
+| レンダリング方式 | 主な特徴・メリット | デメリット・課題 | 得意なユースケース |
+| :--- | :--- | :--- | :--- |
+| **フォワードレンダリング**<br>*(Forward Rendering)* | • オブジェクトごとに「頂点変換」から「光と色の計算」までを一貫して行う基本方式<br>• 半透明描画（Alpha Blend）やアンチエイリアス（MSAA）が容易<br>• メモリ消費が少なくモバイルやVRと相性が良い | • ライト（光源）の数 × オブジェクトの数だけ計算負荷が跳ね上がる（オーバーヘッド大）<br>• 奥に隠れて見えないピクセルも余分にライティング計算される無駄（オーバードロー）が生じやすい | モバイル向けゲーム、VR/XRタイトル、光源数が限定されたシンプルなシーン |
+| **ディファードレンダリング**<br>*(Deferred Rendering)* | • 「幾何情報（G-Buffer）」の書き出しと「光の計算（ライティング）」を2段階に分離（遅延）する方式<br>• **大量の光源（数十〜数百個）**を置いても、画面に見えているピクセル数分しかライティング計算されない | • 複数のテクスチャバッファ（G-Buffer）を保持するため**GPUメモリ（VRAM/帯域）を大量消費**する<br>• 半透明オブジェクトを直接扱えない（フォワードパスで追加描画が必要）<br>• MSAAの実装が難しく重い | リッチなグラフィックスを狙うPC・据置機向けゲーム、夜景や屋内など光源が密集するシーン |
+| **レイトレーシング**<br>*(Ray Tracing)* | • 従来のラスタライズ（三角形のピクセル化）ではなく、**視点（カメラ）や光源から「光の線（レイ）」を放ち、反射・屈折・遮蔽を物理的に追跡**して色を決定する方式<br>• 写真のように正確な反射、リアルな屈折、柔らかな自然な影をシミュレーション可能 | • 非常に莫大な計算負荷がかかり、リアルタイム処理には専用ハードウェア（RTコア等）とノイズ除去（デノイズ）技術が不可欠 | ハイエンドPC/PS5世代のリアルタイムグラフィックス、映画・建築ビジュアライゼーション（オフラインレンダリング含む） |
+
+---
+
+#### 3.3. ⚠️ 本資料・このあとの解説が示しているものはどれか？
+
+> **明示：本資料で解説しているパイプラインは、最も古典的かつ根本的な「フォワードレンダリング（ラスタライズ方式）」のパイプラインです。**
+> 
+> Unity URPのデフォルトのレンダリングパスもフォワードレンダリング（Forward / Forward+）をベースとしており、今回自作・解剖するUnlit（無発光・非ライティング）シェーダーは、まさにこの **「ポリゴンをラスタライズして、ピクセルシェーダーで直接画面へ色を塗る」というフォワードの基本骨格** そのものを学びます。
+> 
+> ※なお、Unlit.shaderの内部構造で見た `GBuffer` パスは、URPで「Deferred（ディファード）」を選択したときに使われる専用のPassです。
+
+---
+
+#### 3.4. 図解：ラスタライズ型パイプライン（フォワード）の旅
 
 モデル（頂点データ）が最終的に画面（ピクセル）になるまで、データは以下の「バケツリレー」を通り抜けます。
 
@@ -160,7 +191,7 @@ Unityでシェーダーを作成する方法には、大きく2つのアプロ�
 
 あなたが開いた `Universal Render Pipeline/Unlit` シェーダーが複雑だのは、**本番環境の現実主義** のせいです。
 
-**実際のUnlit.shaderが複雑だ理由：**
+**実際のUnlit.shaderが複雑な理由：**
 
 1. **本番環境の現実主義**
    - ゲームをリリースするシェーダーは、単なる「動作」ではなく「あらゆる環境で安定して動作」する必要があります
@@ -192,7 +223,7 @@ flowchart TD
 ```
 
 **つまり：**
-- **本ハンドアウトのコードは「嘘」ではなく「簡潔な真実」** です
+- **本ハンドアウトのコードは簡潔** です
 - 基礎を習得してから、本物のシェーダーコードを読み込むと、その複雑さが「技術的な必要性」に基づいていることが見えてきます
 
 ---
@@ -204,6 +235,9 @@ flowchart TD
 ここから、あなたが実際にシェーダーコードを書きます。複雑な本番用シェーダーではなく、**原理を理解するための最小限のコード** です。
 
 ```hlsl
+// URPの標準数学・座標変換関数群を取り込む（TransformObjectToHClipを使うために必須）
+#include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+
 struct Attributes {
 	float4 positionOS : POSITION; // 頂点座標（オブジェクト空間）
 };
@@ -212,7 +246,7 @@ struct Varyings {
 	float4 positionHCS : SV_POSITION; // 画面座標（クリップ空間）
 };
 
-// 頂点シェーダー：座標変換の魔法
+// 頂点シェーダー：座標変換
 Varyings vert(Attributes IN) {
 	Varyings OUT;
 	// DX12における「WVP行列乗算」をUnityがラップしたもの
@@ -229,6 +263,7 @@ half4 frag(Varyings IN) : SV_Target {
 
 #### **3.2. コードの各部分を理解する**
 
+- **`#include ".../Core.hlsl"`** : URPの標準ライブラリ（ヘッダーファイル）を取り込む記述です。`TransformObjectToHClip()` などの便利関数やカメラ・投影行列の定義がこの中に書かれており、これがないとコンパイラが関数を見つけられず `undeclared identifier` エラーになります。
 - **Attributes と Varyings** : 前者は頂点入力、後者はピクセル入力の構造体です。ラスタライザーを通過する際、Attributesの内容はピクセルごとに補間され、Varyingsへと姿を変えます。
 - **TransformObjectToHClip** : モデルの3D座標を、画面の奥行きを含めた2D座標へ変換します。DX12では「W（ワールド）」「V（ビュー）」「P（プロジェクション）」という3つの行列を自ら掛け合わせる必要がありますが、Unityはこれを1つの関数で完結させます。
 - **vert 関数と frag 関数** : vertは頂点ごとに呼ばれる「配置のプロ」、fragはピクセルごとに呼ばれる「塗りのプロ」です。
@@ -306,6 +341,8 @@ Shader "MyShaders/MyFirstShader"
 **失敗した場合：**
 - Console を確認して、エラーメッセージを見る
 - よくある失敗：
+  - `undeclared identifier 'TransformObjectToHClip'` :
+    - **原因**: `#include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"` の書き忘れです。この関数が定義されているライブラリを取り込む必要があります。
   - `ENDHLSL` を忘れた
   - `#pragma vertex vert` / `#pragma fragment frag` の名前が間違っている
   - セマンティクス（`: POSITION` など）を忘れた
@@ -319,7 +356,7 @@ Shader "MyShaders/MyFirstShader"
 
 > **第2時限のまとめ**: 
 > 
-> 「シェーダー開発は、①実物を見て複雑さを知り、②その複雑さが何のためかを理解し、③シンプルな骨組みから段階的に高度な実装へ進むのだ」
+> シェーダー開発は、①実物を見て複雑さを知り、②その複雑さが何のためかを理解し、③シンプルな骨組みから段階的に高度な実装
 
 ---
 
@@ -327,15 +364,220 @@ Shader "MyShaders/MyFirstShader"
 
 ### 1. 定数バッファ（CBUFFER）とSRP Batcher
 
-シェーダー変数を `CBUFFER_START(UnityPerMaterial)` で囲むのには、DX12の哲学に基づいた明確な理由があります。DX12では、データを一つずつGPUに送るのではなく「定数バッファ」という塊で届けます。Unityの **SRP Batcher** は、このバッファをGPUメモリ上に**持続的（Persistent）**に配置します。値が変わらない限り再アップロードをしないため、ドローコールの負荷が劇的に軽減されるのです。
+#### 1.1. CBUFFERの役割とSRP Batcherの仕組み
+シェーダー変数を `CBUFFER_START(UnityPerMaterial)` と `CBUFFER_END` で囲むのには、DX12の哲学に基づいた明確な理由があります。DX12やモダンGPUでは、個々の変数をばらばらにGPUへ送るのではなく、**「定数バッファ（Constant Buffer）」** という連続したメモリの塊として届けます。
+
+Unityの **SRP Batcher** は、このマテリアルごとのバッファ（`UnityPerMaterial`）をGPUメモリ（VRAM）上に**持続的（Persistent）**に常駐させます。同一シェーダーを使うオブジェクト間でマテリアルの値が変わっても、GPU上のバッファをその都度再アップロード（バインド切り替え）せず、オフセットの切り替えだけで描画を連続実行するため、**ドローコールのCPU負荷（SetPass Calls）が劇的に削減**されます。
+
+```hlsl
+// SRP Batcherに対応するための定数バッファ記述
+CBUFFER_START(UnityPerMaterial)
+    float4 _BaseColor;
+    float  _Metallic;
+    float  _Smoothness;
+CBUFFER_END
+```
+
+---
+
+#### 1.2. 16バイト・アライメント（バウンダリ境界）の注意点
+HLSLの定数バッファを扱う上で、最も初心者が踏みやすい罠が**「16バイト・バウンダリ（境界アライメント規則）」**です。
+
+GPUのハードウェアアーキテクチャでは、定数バッファは **16バイト（4バイト×4要素 = float4単位）のレジスタスロット（ベクトルレジスタ）** を基準に読み出されます。そのため、変数の配置には厳格なパッキングルールが存在します：
+
+1. **基本型サイズ**: `float`（4バイト）、`float2`（8バイト）、`float3`（12バイト）、`float4`（16バイト）
+2. **16バイト境界またぎの禁止**: 1つの変数が16バイトレジスタの境界をまたぐことはできません。入り切らない場合は、自動的に次の16バイトレジスタの先頭までパディング（無駄な隙間メモリ）が空けられます。
+
+**❌ 悪い変数の並び順（メモリの無駄と予期せぬパディング）**
+```hlsl
+CBUFFER_START(UnityPerMaterial)
+    float  _ValueA;      // slot 0: x成分 [4バイト]
+    float4 _Color;       // slot 0の yzw には収まらないため、slot 1 (xyzw) [16バイト] へ送られる！
+                         // → slot 0 の残り12バイトが未浪費パディングになる
+    float  _ValueB;      // slot 2: x成分 [4バイト]
+CBUFFER_END
+```
+
+**⭕ 良い変数の並び順（大きい型から並べる、または隙間を埋める）**
+```hlsl
+CBUFFER_START(UnityPerMaterial)
+    float4 _Color;       // slot 0: 全4成分 (xyzw) をきれいに消費 [16バイト]
+    float  _ValueA;      // slot 1: x成分 [4バイト]
+    float  _ValueB;      // slot 1: y成分 [4バイト]
+    float2 _Offset;      // slot 1: zw成分 [8バイト] (合計でちょうど16バイト！)
+CBUFFER_END
+```
+> **実践ルール**: 原則として **`float4` や行列などの大きな型を先に書き、`float2` や単一の `float` を末尾にまとめる** ことで、不要なパディングの発生やCPU-GPU間のメモリ配置ズレによるバグを防ぐことができます。
+
+---
+
+#### 1.3. レジスタの割り当て（bレジスタ）
+DirectX 12 / HLSLの世界では、定数バッファはGPUハードウェアの **「定数バッファレジスタ（`b0`, `b1`, `b2` ...）」** にバインドされます。
+
+- **手動DX12の場合**: `cbuffer MyBuffer : register(b0)` のように、どのスロットレジスタを使うかルートシグネチャと突き合わせて明示指定します。
+- **Unity URPの場合**: `CBUFFER_START(UnityPerMaterial)` マクロが内部で自動的に適切なレジスタ（`register(b0)` や SRP管理レジスタ）へと割り当てを割り振ってくれます。
+- **フレーム単位のグローバルデータ**: カメラ行列や時間・ライト情報は `UnityPerDraw` や `UnityPerFrame` などの専用定数バッファレジスタにUnityエンジン側から自動供給されます。
+
+---
+
+#### 1.4. ShaderLabの「Properties」とCBUFFER変数の厳密なリンク
+Unityエディタのインスペクターにパラメータを表示する `Properties { }` と、HLSL内の `CBUFFER` は、以下のように連携しています：
+
+```
+【Unity Inspector (エディタUI)】
+        ↕ (ユーザーが色や数値を操作)
+【ShaderLab Properties ブロック】
+    _BaseColor ("Base Color", Color) = (1, 1, 1, 1)
+        ↕ (Unityエンジンが名前をキーにバインド)
+【HLSL CBUFFER (GPUメモリ)】
+    CBUFFER_START(UnityPerMaterial)
+        float4 _BaseColor; // ← ★プロパティ名と完全一致させる必要がある！
+    CBUFFER_END
+```
+
+- **変数名の完全一致（大文字・小文字も区別）**:
+  Propertiesブロックで宣言した内部変数名（例: `_BaseColor`）と、CBUFFER内のHLSL変数名（`float4 _BaseColor;`）は、**綴りも大文字小文字も完全に一致**していなければなりません。
+- **一致しないとどうなるか？**:
+  Unityはコンパイルエラーを出さずに黙殺します。その結果、「マテリアルのインスペクターで色を変えても、シェーダー側に値が届かず画面が変化しない」という最もありがちなトラブルの原因になります。
+- **テクスチャの扱い**:
+  テクスチャ（`Texture2D`）は巨大な画像データであり定数バッファには入りません。そのため、テクスチャ本体はCBUFFERの外で `TEXTURE2D(_BaseMap); SAMPLER(sampler_BaseMap);` として宣言し、CBUFFERの中にはタイリング・オフセット値である `float4 _BaseMap_ST;`（ST = Scale & Translate）のみを格納します。
+
+---
 
 ### 2. C#からシェーダーへ値を送る
 
+#### 2.1. CPUからGPUへデータを送る基本3ステップ
 CPU（C#）側からGPU（シェーダー）側へデータを送る手順は、常に以下の3ステップです。
 
-1. **IDの取得** : `Shader.PropertyToID("_Color")` で、データの「住所」を固定する。
-2. **値のセット** : `material.SetColor(id, color)` でデータを流し込む。
-3. **GPUの更新** : 次の描画タイミングで、GPU上の定数バッファの内容が書き換わる。
+1. **IDの取得** : `Shader.PropertyToID("_BaseColor")` で、プロパティ文字列を整数IDに変換し、GPUデータの「住所（キー）」を固定する。
+2. **値のセット** : `material.SetColor(id, color)` でマテリアルのプロパティにデータを流し込む。
+3. **GPUの更新** : 次の描画タイミングで、GPU上の定数バッファ（CBUFFER）の内容が書き換わり描画色が変わる。
+
+---
+
+#### 2.2. 実践ハンズオン：MyFirstShaderに色変更機能を追加する
+
+第2時限で作った `MyFirstShader` は、ピクセルシェーダー内で固定の白色（`half4(1, 1, 1, 1)`）を返していました。  
+これを、**インスペクターやC#スクリプトから色を変更できるように改造** します。
+
+変更を加える場所は **3箇所** です：
+
+```
+【修正箇所1】Properties ブロック
+    → インスペクターUIに色プロパティ「_BaseColor」を追加
+【修正箇所2】HLSL CBUFFER ブロック
+    → CBUFFER_START(UnityPerMaterial) の中に「half4 _BaseColor;」を宣言
+【修正箇所3】frag() 関数
+    → 固定値の (1, 1, 1, 1) を「_BaseColor」に置き換え
+```
+
+##### 差分コード（`MyFirstShader.shader` の変更点）
+
+```shader
+Shader "MyShaders/MyFirstShader"
+{
+    Properties
+    {
+        // 【修正箇所1】インスペクター上に表示するカラーパレットを追加
+        _BaseColor ("Base Color", Color) = (1, 1, 1, 1)
+    }
+
+    SubShader
+    {
+        Tags
+        {
+            "RenderType" = "Opaque"
+            "RenderPipeline" = "UniversalPipeline"
+        }
+
+        Pass
+        {
+            HLSLPROGRAM
+            #pragma vertex vert
+            #pragma fragment frag
+
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+
+            // 【修正箇所2】SRP Batcher対応の定数バッファに変数を追加
+            // ★重要：Propertiesの「_BaseColor」と全く同じ綴り・型（16バイト）で宣言する
+            CBUFFER_START(UnityPerMaterial)
+                half4 _BaseColor;
+            CBUFFER_END
+
+            struct Attributes {
+                float4 positionOS : POSITION;
+            };
+
+            struct Varyings {
+                float4 positionHCS : SV_POSITION;
+            };
+
+            Varyings vert(Attributes IN) {
+                Varyings OUT;
+                OUT.positionHCS = TransformObjectToHClip(IN.positionOS.xyz);
+                return OUT;
+            }
+
+            // 【修正箇所3】固定の白ではなく、受け取った _BaseColor を出力する
+            half4 frag(Varyings IN) : SV_Target {
+                return _BaseColor;
+            }
+
+            ENDHLSL
+        }
+    }
+}
+```
+
+この変更を保存すると、Unityエディタのインスペクター上でカラーパレットを弄るだけでCubeの色が変わるようになります！
+
+---
+
+#### 2.3. C#スクリプトを作成して動的に色を変えてみる
+
+シェーダー側で `_BaseColor` を受け取れるようになったので、次にC#スクリプトから毎フレーム色を変化（アニメーション）させてみましょう。
+
+##### 1. C#スクリプトの作成（例: `ColorChanger.cs`）
+
+```csharp
+using UnityEngine;
+
+public class ColorChanger : MonoBehaviour
+{
+    private Material _targetMaterial;
+    private int _baseColorId;
+
+    void Start()
+    {
+        // 1. レンダラーからマテリアルのインスタンスを取得
+        Renderer renderer = GetComponent<Renderer>();
+        _targetMaterial = renderer.material;
+
+        // 2. 文字列 "_BaseColor" を高速な整数IDに変換してキャッシュ（毎フレーム文字列検索しないため）
+        _baseColorId = Shader.PropertyToID("_BaseColor");
+    }
+
+    void Update()
+    {
+        // 時間経過でRGBがグラデーション変化する色を計算
+        float r = Mathf.Sin(Time.time * 2.0f) * 0.5f + 0.5f;
+        float g = Mathf.Cos(Time.time * 2.0f) * 0.5f + 0.5f;
+        float b = 1.0f;
+        Color newColor = new Color(r, g, b, 1.0f);
+
+        // 3. マテリアルに新しい色をセット → GPUの定数バッファへ反映！
+        _targetMaterial.SetColor(_baseColorId, newColor);
+    }
+}
+```
+
+##### 2. 動作確認
+1. 上記の `ColorChanger.cs` を作成し、Cubeオブジェクトにアタッチします。
+2. Unityの再生（Play）ボタンを押します。
+3. Cubeの色が時間とともに滑らかに変化すれば成功です！  
+   **「C#（CPU）→ SetColor → 定数バッファ（GPU）→ ピクセルシェーダー」** というデータのパイプラインが繋がった瞬間です。
+
+---
 
 ### 3. 怖くないデバッグ：エンジニアの規律
 
