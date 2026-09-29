@@ -73,8 +73,12 @@ return half4(n * 0.5h + 0.5h, 1.0h);
 
 ## 4. フラットシェーディング実装
 
-フラットシェーディングは「面ごとに同じ法線」で計算する方式です。  
-URPでは、フラグメント内で微分を使って面法線を再構築できます。
+ここでは **フラットシェーディングだけ** を行う単体シェーダーとして実装します。  
+考え方は「頂点法線を使わず、ピクセル位置の微分から面法線を再構築する」です。
+
+### 4.1 面法線の再構築を掘り下げる
+
+以下の3行が中核です。
 
 ```hlsl
 half3 dpdx = ddx(IN.positionWS);
@@ -82,7 +86,88 @@ half3 dpdy = ddy(IN.positionWS);
 half3 faceN = normalize(cross(dpdy, dpdx));
 ```
 
-この `faceN` で拡散反射を計算すると、ポリゴン面がくっきり見える描画になります。
+それぞれの意味:
+
+1. `IN.positionWS` は「現在ピクセルのワールド座標」
+2. `ddx(IN.positionWS)` は「画面のx方向に1ピクセル進んだとき、座標がどれだけ変化するか」
+3. `ddy(IN.positionWS)` は「画面のy方向に1ピクセル進んだとき、座標がどれだけ変化するか」
+
+`dpdx` と `dpdy` は、その三角形面上の接ベクトルです。  
+2本の接ベクトルの外積 `cross(dpdy, dpdx)` を取ると、面に垂直なベクトル（面法線）が得られます。
+
+- `cross(a, b)` の結果は `a` と `b` の両方に直交
+- 順序で向きが反転するため、`cross(dpdy, dpdx)` と `cross(dpdx, dpdy)` は逆向き
+- 最後に `normalize` して単位法線にする
+
+この方法を使うと、同じ三角形内ではほぼ同じ法線が得られるため、結果として「面ごとに一定の明るさ」になり、カクッとした見た目（フラット）になります。
+
+### 4.2 単体実装サンプル（Flat.shader）
+
+```shader
+Shader "ShaderProgramming/Chapter2/Flat"
+{
+	Properties
+	{
+		_BaseColor ("Base Color", Color) = (1,1,1,1)
+	}
+
+	SubShader
+	{
+		Tags { "RenderType"="Opaque" "RenderPipeline"="UniversalPipeline" }
+
+		Pass
+		{
+			HLSLPROGRAM
+			#pragma vertex vert
+			#pragma fragment frag
+
+			#include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+			#include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
+
+			CBUFFER_START(UnityPerMaterial)
+				half4 _BaseColor;
+			CBUFFER_END
+
+			struct Attributes
+			{
+				float4 positionOS : POSITION;
+			};
+
+			struct Varyings
+			{
+				float4 positionHCS : SV_POSITION;
+				float3 positionWS  : TEXCOORD0;
+			};
+
+			Varyings vert(Attributes IN)
+			{
+				Varyings OUT;
+				OUT.positionWS = TransformObjectToWorld(IN.positionOS.xyz);
+				OUT.positionHCS = TransformWorldToHClip(OUT.positionWS);
+				return OUT;
+			}
+
+			half4 frag(Varyings IN) : SV_Target
+			{
+				Light mainLight = GetMainLight();
+
+				half3 dpdx = ddx(IN.positionWS);
+				half3 dpdy = ddy(IN.positionWS);
+				half3 faceN = normalize(cross(dpdy, dpdx));
+
+				half3 L = normalize(-mainLight.direction);
+				half NdotL = saturate(dot(faceN, L));
+
+				half3 diffuse = _BaseColor.rgb * mainLight.color * NdotL;
+				return half4(diffuse, 1.0h);
+			}
+			ENDHLSL
+		}
+	}
+}
+```
+
+> このコードは `Assets/ShaderProgramming/Chapter2/Flat.shader` として保存して使います。
 
 ---
 
