@@ -1,4 +1,4 @@
-# Chapter2：拡散反射・鏡面反射の基礎（URP / Directional Light 1灯）
+# Chapter2：拡散反射・鏡面反射の基礎（URP / Directional Light 単体）
 
 この章は `index.md` の **17週**（拡散反射、鏡面反射の基礎）に対応します。  
 前提として、**シーンには Directional Light を1つだけ**置いているものとします。
@@ -53,21 +53,98 @@ URPのHLSLでは、主に以下を使います。
 
 ---
 
-## 3. 法線の見方（Normal Visualize）
+## 3. 法線の向きを可視化してみる（Normal Visualize）
 
-まず法線を色として表示すると理解が早いです。  
-法線ベクトルは `[-1, 1]` の範囲なので、表示用に `[0, 1]` に変換します。
+### 3.1 法線とは
+
+**法線（Normal Vector）** は、ポリゴンの表面に対して垂直な方向を示す単位ベクトルです。ライティング計算では、この法線と光の方向の関係から「その面がどれだけ光を受けるか」を決定します。
+
+- **頂点法線** : メッシュの各頂点に指定された法線。スムーズなシェーディングに使われる
+- **面法線** : 三角形面そのものの向き。フラットシェーディングで使われる
+
+### 3.2 法線を色で可視化する
+
+法線を直接見えるようにするために、法線ベクトルを**RGB色に変換して画面に映します**。
+
+法線ベクトルは `[-1, 1]` の範囲なので、表示用に `[0, 1]` に変換します：
 
 ```hlsl
 half3 n = normalize(IN.normalWS);
 return half4(n * 0.5h + 0.5h, 1.0h);
 ```
 
-- 赤成分: X方向法線
-- 緑成分: Y方向法線
-- 青成分: Z方向法線
+色の対応：
 
-これで「頂点法線がどう補間されているか」が見えます。
+| 成分 | 意味 | 色例 |
+| :--- | :--- | :--- |
+| 赤（R） | X方向法線 | 赤系 ＝ 法線がX正方向（右向き） |
+| 緑（G） | Y方向法線 | 緑系 ＝ 法線がY正方向（上向き） |
+| 青（B） | Z方向法線 | 青系 ＝ 法線がZ正方向（奥向き） |
+
+**結果として、複数の色が混ざった画面が見えます** — これは「頂点法線がピクセルごとにどう補間されているか」を表しています。この可視化により、後続の**フラット・グーロー・フォンシェーディングで何が起こっているか**をより直感的に理解できるようになります。
+
+### 3.3 実装サンプル（NormalVisualizer.shader）
+
+以下は法線をそのまま色で表示するシェーダーです。`Assets/ShaderProgramming/Chapter2/NormalVisualizer.shader` として保存して使います。
+
+```shader
+Shader "ShaderProgramming/Chapter2/NormalVisualizer"
+{
+	Properties
+	{
+	}
+
+	SubShader
+	{
+		Tags { "RenderType"="Opaque" "RenderPipeline"="UniversalPipeline" }
+
+		Pass
+		{
+			HLSLPROGRAM
+			#pragma vertex vert
+			#pragma fragment frag
+
+			#include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+
+			struct Attributes
+			{
+				float4 positionOS : POSITION;
+				float3 normalOS   : NORMAL;
+			};
+
+			struct Varyings
+			{
+				float4 positionHCS : SV_POSITION;
+				half3  normalWS    : TEXCOORD0;
+			};
+
+			Varyings vert(Attributes IN)
+			{
+				Varyings OUT;
+				OUT.positionHCS = TransformObjectToHClip(IN.positionOS.xyz);
+				OUT.normalWS = TransformObjectToWorldNormal(IN.normalOS);
+				return OUT;
+			}
+
+			half4 frag(Varyings IN) : SV_Target
+			{
+				// 法線を [-1, 1] から [0, 1] へ変換
+				half3 n = normalize(IN.normalWS);
+				half3 visualNormal = n * 0.5h + 0.5h;
+
+				return half4(visualNormal, 1.0h);
+			}
+			ENDHLSL
+		}
+	}
+}
+```
+
+> **使い方**:
+> 1. このシェーダーをマテリアルに適用する
+> 2. ゲーム画面に「虹色のグラデーション」が表示される
+> 3. 色が均一な領域 ＝ 法線が一定（フラットな面）
+> 4. 色が滑らかに変わる領域 ＝ 法線が補間されている（スムーズなシェーディング）
 
 ---
 
@@ -100,6 +177,8 @@ half3 faceN = normalize(cross(dpdy, dpdx));
 - 最後に `normalize` して単位法線にする
 
 この方法を使うと、同じ三角形内ではほぼ同じ法線が得られるため、結果として「面ごとに一定の明るさ」になり、カクッとした見た目（フラット）になります。
+
+
 
 ### 4.2 単体実装サンプル（Flat.shader）
 
