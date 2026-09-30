@@ -146,12 +146,14 @@ Shader "ShaderProgramming/Chapter2/NormalVisualizer"
 > 3. 色が均一な領域 ＝ 法線が一定（フラットな面）
 > 4. 色が滑らかに変わる領域 ＝ 法線が補間されている（スムーズなシェーディング）
 
+
 ---
 
 ## 4. フラットシェーディング実装
 
 ここでは **フラットシェーディングだけ** を行う単体シェーダーとして実装します。  
-考え方は「頂点法線を使わず、ピクセル位置の微分から面法線を再構築する」です。
+頂点法線を使わず、ピクセル位置の微分から面法線を再構築します。Unityで一般的に扱うMeshには、頂点ごとの法線情報が含まれています。通常は、頂点シェーダーからフラグメントシェーダーへ渡された法線が、ラスタライズ時にピクセルごとに補間されます。
+この実装では、補間された頂点法線を使用すると平面にならないため、利用しません。その代わりに、HLSLの画面空間微分命令である ddx / ddy を用いて、画面上でのワールド座標の変化量を取得します。2つの変化量の外積を取ることで、現在描画している三角形の面法線を再構築できます。
 
 ### 4.1 面法線の再構築を掘り下げる
 
@@ -169,7 +171,16 @@ half3 faceN = normalize(cross(dpdy, dpdx));
 2. `ddx(IN.positionWS)` は「画面のx方向に1ピクセル進んだとき、座標がどれだけ変化するか」
 3. `ddy(IN.positionWS)` は「画面のy方向に1ピクセル進んだとき、座標がどれだけ変化するか」
 
-`dpdx` と `dpdy` は、その三角形面上の接ベクトルです。  
+公式ドキュメントリンク一覧
+Direct3D HLSL リファレンス (Microsoft Learn):
+ddx 関数 ([HLSL Reference](https://learn.microsoft.com/ja-jp/windows/win32/direct3dhlsl/dx-graphics-hlsl-ddx))
+ddy 関数 ([HLSL Reference](https://learn.microsoft.com/ja-jp/windows/win32/direct3dhlsl/dx-graphics-hlsl-ddy))
+fwidth 関数 ([HLSL Reference](https://learn.microsoft.com/ja-jp/windows/win32/direct3dhlsl/dx-graphics-hlsl-fwidth))
+
+`dpdx` と `dpdy` は、その三角形面上の接ベクトルです。
+
+![法線可視化の実行例](./watermarked_img_15521748016248688758.jpg)
+
 2本の接ベクトルの外積 `cross(dpdy, dpdx)` を取ると、面に垂直なベクトル（面法線）が得られます。
 
 - `cross(a, b)` の結果は `a` と `b` の両方に直交
@@ -252,28 +263,52 @@ Shader "ShaderProgramming/Chapter2/Flat"
 
 ## 5. グーロー / フォンの違い
 
-- **グーロー（Gouraud）**: 頂点でライティング計算して、色を補間
-- **フォン（Phong）**: ピクセルで法線を使ってライティング計算
+### 5.1 Unityの頂点法線と補間
 
-一般的に:
-- グーロー: 軽いがハイライトが粗い
-- フォン: 重いが見た目が滑らか
+Unityの一般的なMeshには、各頂点の向きを表す法線が頂点属性として保存されています。自作シェーダーでは、`Attributes` の `normalOS : NORMAL` からこの頂点法線を受け取ります。
+
+```hlsl
+struct Attributes
+{
+	float3 normalOS : NORMAL;
+};
+```
+
+頂点シェーダーで法線を `Varyings` の `TEXCOORD` へ代入すると、ラスタライザが三角形の内部で法線をピクセルごとに自動補間します。フラグメントシェーダーでは、補間によって長さが変化した法線を `normalize` してから利用します。
+
+```hlsl
+// vert: オブジェクト空間の頂点法線をワールド空間へ変換して渡す
+OUT.normalWS = TransformObjectToWorldNormal(IN.normalOS);
+
+// frag: 補間済みの法線を正規化して利用する
+half3 N = normalize(IN.normalWS);
+```
+
+この仕組みにより、**フォンシェーディングでは法線の補間処理を自分で実装する必要はありません**。補間済みの法線を使い、フラグメントシェーダーでピクセルごとのライティング計算を行います。
+
+一方、**グーローシェーディングでも補間処理を自分で実装する必要はありません**。こちらは頂点シェーダーで法線を使ってライティング結果の色を計算し、その色を `Varyings` へ渡します。ラスタライザが色を自動補間するため、フラグメントシェーダーは補間済みの色を出力するだけです。
+
+| 方式 | ライティング計算の場所 | フラグメントシェーダーへ渡す値 | 特徴 |
+| :--- | :--- | :--- | :--- |
+| **グーロー（Gouraud）** | 頂点シェーダー | 計算済みの色 | 頂点間で色を補間するため軽量だが、頂点の少ないメッシュでは鏡面反射が粗くなる。 |
+| **フォン（Phong）** | フラグメントシェーダー | ワールド座標と法線 | ピクセルごとに法線を正規化して計算するため、鏡面反射が滑らかになる。 |
+
+以降では、同じマテリアルプロパティを持つ2つの独立したシェーダーを作成して比較します。
 
 ---
 
-## 6. 実装サンプル（1ファイルで切り替え）
+## 6. グーローシェーディング実装（Gouraud.shader）
 
-以下は、法線表示 / フラット / グーロー / フォンを切り替え可能な最小サンプルです。
+グーローシェーディングでは、`vert` 関数で拡散反射と鏡面反射を計算し、計算済みの色 `lighting` を補間して `frag` 関数へ渡します。
 
 ```shader
-Shader "ShaderProgramming/Chapter2/LightingBasics"
+Shader "ShaderProgramming/Chapter2/Gouraud"
 {
 	Properties
 	{
 		_BaseColor ("Base Color", Color) = (1,1,1,1)
 		_SpecColor ("Specular Color", Color) = (1,1,1,1)
 		_Shininess ("Shininess", Range(1,128)) = 32
-		[Enum(NormalDebug,0,Flat,1,Gouraud,2,Phong,3)] _Mode ("Mode", Float) = 3
 	}
 
 	SubShader
@@ -293,7 +328,84 @@ Shader "ShaderProgramming/Chapter2/LightingBasics"
 				half4 _BaseColor;
 				half4 _SpecColor;
 				half _Shininess;
-				half _Mode;
+			CBUFFER_END
+
+			struct Attributes
+			{
+				float4 positionOS : POSITION;
+				float3 normalOS   : NORMAL;
+			};
+
+			struct Varyings
+			{
+				float4 positionHCS : SV_POSITION;
+				half3 lighting     : TEXCOORD0;
+			};
+
+			Varyings vert(Attributes IN)
+			{
+				Varyings OUT;
+				float3 positionWS = TransformObjectToWorld(IN.positionOS.xyz);
+				half3 normalWS = normalize(TransformObjectToWorldNormal(IN.normalOS));
+				OUT.positionHCS = TransformWorldToHClip(positionWS);
+
+				Light mainLight = GetMainLight();
+				half3 L = normalize(-mainLight.direction);
+				half3 V = normalize(_WorldSpaceCameraPos.xyz - positionWS);
+				half3 H = normalize(L + V);
+				half NdotL = saturate(dot(normalWS, L));
+				half NdotH = saturate(dot(normalWS, H));
+				OUT.lighting = _BaseColor.rgb * mainLight.color * NdotL
+					+ _SpecColor.rgb * pow(NdotH, _Shininess);
+
+				return OUT;
+			}
+
+			half4 frag(Varyings IN) : SV_Target
+			{
+				return half4(IN.lighting, 1.0h);
+			}
+			ENDHLSL
+		}
+	}
+}
+```
+
+> このコードは `Assets/ShaderProgramming/Chapter2/Gouraud.shader` として保存して使います。
+
+---
+
+## 7. フォンシェーディング実装（Phong.shader）
+
+フォンシェーディングでは、`vert` 関数からワールド座標と法線を渡し、補間後の値を使って `frag` 関数で拡散反射と鏡面反射を計算します。
+
+```shader
+Shader "ShaderProgramming/Chapter2/Phong"
+{
+	Properties
+	{
+		_BaseColor ("Base Color", Color) = (1,1,1,1)
+		_SpecColor ("Specular Color", Color) = (1,1,1,1)
+		_Shininess ("Shininess", Range(1,128)) = 32
+	}
+
+	SubShader
+	{
+		Tags { "RenderType"="Opaque" "RenderPipeline"="UniversalPipeline" }
+
+		Pass
+		{
+			HLSLPROGRAM
+			#pragma vertex vert
+			#pragma fragment frag
+
+			#include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+			#include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
+
+			CBUFFER_START(UnityPerMaterial)
+				half4 _BaseColor;
+				half4 _SpecColor;
+				half _Shininess;
 			CBUFFER_END
 
 			struct Attributes
@@ -306,8 +418,7 @@ Shader "ShaderProgramming/Chapter2/LightingBasics"
 			{
 				float4 positionHCS : SV_POSITION;
 				float3 positionWS  : TEXCOORD0;
-				half3  normalWS    : TEXCOORD1;
-				half3  gouraudLit  : TEXCOORD2;
+				half3 normalWS     : TEXCOORD1;
 			};
 
 			Varyings vert(Attributes IN)
@@ -316,70 +427,22 @@ Shader "ShaderProgramming/Chapter2/LightingBasics"
 				OUT.positionWS = TransformObjectToWorld(IN.positionOS.xyz);
 				OUT.positionHCS = TransformWorldToHClip(OUT.positionWS);
 				OUT.normalWS = TransformObjectToWorldNormal(IN.normalOS);
-
-				// Gouraud用: 頂点でライティング
-				Light mainLight = GetMainLight();
-				half3 N = normalize(OUT.normalWS);
-				half3 L = normalize(-mainLight.direction);
-				half3 V = normalize(_WorldSpaceCameraPos.xyz - OUT.positionWS);
-				half3 H = normalize(L + V);
-
-				half NdotL = saturate(dot(N, L));
-				half NdotH = saturate(dot(N, H));
-
-				half3 diffuse = _BaseColor.rgb * mainLight.color * NdotL;
-				half3 spec = _SpecColor.rgb * pow(NdotH, _Shininess);
-				OUT.gouraudLit = diffuse + spec;
-
 				return OUT;
 			}
 
 			half4 frag(Varyings IN) : SV_Target
 			{
-				// 0: Normal Debug
-				if (_Mode < 0.5h)
-				{
-					half3 n = normalize(IN.normalWS);
-					return half4(n * 0.5h + 0.5h, 1.0h);
-				}
-
 				Light mainLight = GetMainLight();
-				half3 lightColor = mainLight.color;
+				half3 N = normalize(IN.normalWS);
+				half3 L = normalize(-mainLight.direction);
+				half3 V = normalize(_WorldSpaceCameraPos.xyz - IN.positionWS);
+				half3 H = normalize(L + V);
+				half NdotL = saturate(dot(N, L));
+				half NdotH = saturate(dot(N, H));
+				half3 diffuse = _BaseColor.rgb * mainLight.color * NdotL;
+				half3 specular = _SpecColor.rgb * pow(NdotH, _Shininess);
 
-				// 1: Flat
-				if (_Mode < 1.5h)
-				{
-					half3 dpdx = ddx(IN.positionWS);
-					half3 dpdy = ddy(IN.positionWS);
-					half3 faceN = normalize(cross(dpdy, dpdx));
-					half3 L = normalize(-mainLight.direction);
-
-					half NdotL = saturate(dot(faceN, L));
-					half3 col = _BaseColor.rgb * lightColor * NdotL;
-					return half4(col, 1.0h);
-				}
-
-				// 2: Gouraud
-				if (_Mode < 2.5h)
-				{
-					return half4(IN.gouraudLit, 1.0h);
-				}
-
-				// 3: Phong
-				{
-					half3 N = normalize(IN.normalWS);
-					half3 L = normalize(-mainLight.direction);
-					half3 V = normalize(_WorldSpaceCameraPos.xyz - IN.positionWS);
-					half3 H = normalize(L + V);
-
-					half NdotL = saturate(dot(N, L));
-					half NdotH = saturate(dot(N, H));
-
-					half3 diffuse = _BaseColor.rgb * lightColor * NdotL;
-					half3 spec = _SpecColor.rgb * pow(NdotH, _Shininess);
-
-					return half4(diffuse + spec, 1.0h);
-				}
+				return half4(diffuse + specular, 1.0h);
 			}
 			ENDHLSL
 		}
@@ -387,23 +450,26 @@ Shader "ShaderProgramming/Chapter2/LightingBasics"
 }
 ```
 
+> このコードは `Assets/ShaderProgramming/Chapter2/Phong.shader` として保存して使います。
+
 ---
 
-## 7. 実習手順
+## 8. 実習手順
 
-1. `Assets/ShaderProgramming/Chapter2/` を作成
-2. 上記シェーダーを `LightingBasics.shader` として保存
-3. マテリアルを作成してシェーダーを割り当て
+1. `Assets/ShaderProgramming/Chapter2/` に、次の4ファイルがあることを確認する
+   - `NormalVisualizer.shader`
+   - `Flat.shader`
+   - `Gouraud.shader`
+   - `Phong.shader`
+2. 各シェーダー用のマテリアルを1つずつ作成する
+3. 比較用に同じメッシュを4つ用意し、それぞれのマテリアルを割り当てる
 4. シーンには Directional Light を1つだけ置く
-5. `_Mode` を切り替えて比較
-   - `NormalDebug`
-   - `Flat`
-   - `Gouraud`
-   - `Phong`
+5. Gouraud と Phong のマテリアルで、`_BaseColor`、`_SpecColor`、`_Shininess` を同じ値に設定する
+6. カメラまたはDirectional Lightの向きを変え、各シェーダーの描画結果を比較する
 
 ---
 
-## 8. 観察ポイント
+## 9. 観察ポイント
 
 - Flatでは面ごとの段差が見えるか
 - Gouraudでハイライトが頂点依存で粗く見えるか
@@ -412,9 +478,9 @@ Shader "ShaderProgramming/Chapter2/LightingBasics"
 
 ---
 
-## 9. まとめ
+## 10. まとめ
 
 - URPでは `GetMainLight()` でメインライト情報を取得できる
 - 法線理解には「色で可視化」が最短
-- Flat / Gouraud / Phong の差は「どこで何を補間するか」の差
+- Flat / Gouraud / Phong の差は「どこで法線とライティングを計算・補間するか」の差
 - この章は次のシャドウイング実装の土台になる
