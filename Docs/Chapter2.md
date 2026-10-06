@@ -146,6 +146,89 @@ Shader "ShaderProgramming/Chapter2/NormalVisualizer"
 > 3. 色が均一な領域 ＝ 法線が一定（フラットな面）
 > 4. 色が滑らかに変わる領域 ＝ 法線が補間されている（スムーズなシェーディング）
 
+### 3.4 UnityがMeshに持つ法線情報の確認
+
+UnityではMeshに頂点法線が含まれています。これは、各頂点ごとに法線ベクトルが定義されており、スムーズなシェーディングを行うために使用されます。そのため、基本的に法線は補完される仕組みがパイプラインに出来上がっており、法線情報を受け渡す方法にすると、グーローシェーディングが簡単に実装できます。
+CPU側でMeshでnormalを確認するには、以下のようなスクリプトを使うと便利です。
+```Csharp:Meshdumper.cs
+// Meshの法線情報を確認する例
+using UnityEngine;
+
+public class MeshDumper : MonoBehaviour
+{
+    // ノーマル表示設定
+    public bool showVertexNormals = true;
+    public float normalLength = 0.1f;
+    public Color normalColor = Color.blue;
+    public float normalLineWidth = 0.01f;
+
+    // Start is called once before the first execution of Update after the MonoBehaviour is created
+    void Start()
+    {
+        Mesh mesh = null;
+        var mf = GetComponent<MeshFilter>();
+        if (mf != null) mesh = mf.sharedMesh;
+        else
+        {
+            var smr = GetComponent<SkinnedMeshRenderer>();
+            if (smr != null) mesh = smr.sharedMesh;
+        }
+
+        if (mesh == null)
+        {
+            Debug.LogWarning("MeshDumper: No mesh found on this GameObject.");
+            return;
+        }
+
+        var verts = mesh.vertices;
+        Debug.Log($"Mesh '{mesh.name}' vertex count: {verts.Length}");
+        for (int i = 0; i < verts.Length; i++)
+        {
+            Vector3 worldPos = transform.TransformPoint(verts[i]);
+            Debug.Log($"[{i}] Local: {verts[i]}  World: {worldPos}");
+        }
+
+        // 頂点ごとのノーマルをLineRendererで表示
+        if (showVertexNormals)
+        {
+            var normals = mesh.normals;
+            if (normals == null || normals.Length != verts.Length)
+            {
+                Debug.LogWarning("MeshDumper: Mesh does not contain valid normals to display.");
+                return;
+            }
+
+            // ノーマル表示用の親オブジェクト
+            var parent = new GameObject($"{name}_VertexNormals");
+            parent.transform.SetParent(transform, false);
+
+            // 共有マテリアルを1つ作成して使い回す
+            var lineMat = new Material(Shader.Find("Sprites/Default"));
+
+            for (int i = 0; i < verts.Length; i++)
+            {
+                Vector3 worldPos = transform.TransformPoint(verts[i]);
+                Vector3 worldNormal = transform.TransformDirection(normals[i]).normalized;
+
+                var go = new GameObject($"Normal_{i}");
+                go.transform.SetParent(parent.transform, false);
+                var lr = go.AddComponent<LineRenderer>();
+                lr.useWorldSpace = true;
+                lr.positionCount = 2;
+                lr.SetPosition(0, worldPos);
+                lr.SetPosition(1, worldPos + worldNormal * normalLength);
+                lr.startWidth = lr.endWidth = normalLineWidth;
+                lr.material = lineMat;
+                lr.startColor = lr.endColor = normalColor;
+                // 不要な余分な機能をオフ
+                lr.loop = false;
+            }
+        }
+    }
+
+
+}
+```
 
 ---
 
