@@ -533,7 +533,7 @@ Shader "ShaderProgramming/Chapter2/Gouraud02"
 }
 ```
 
-> このコードは `Assets/ShaderProgramming/Chapter2/Gouraud.shader` として保存して使います。
+> このコードは `Assets/ShaderProgramming/Chapter2/Gouraud02.shader` として保存して使います。
 
 ---
 
