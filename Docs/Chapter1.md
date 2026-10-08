@@ -310,7 +310,8 @@ Shader "MyShaders/MyFirstShader"
 1. Unity に戻ると、`MyFirstShader.shader` が自動認識され、コンパイルされます
 2. シーンに Cube を配置（まだない場合）
 3. Inspector で Cube の Material を選択
-4. Material のShaderドロップダウンから `MyShaders/MyFirstShader` を選択
+4. Material のShaderドロップダウンから `MyShaders/MyFirstShader` を選択する。これはコードの先頭にある、
+`Shader "MyShaders/MyFirstShader"` の名前に対応しています。
 5. **画面に白い立方体が表示される**
    - うまくいきました！最小限のシェーダーが動作しています！
 
