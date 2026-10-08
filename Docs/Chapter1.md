@@ -507,6 +507,8 @@ Shader "MyShaders/MyFirstShader"
 ```
 
 この変更を保存すると、Unityエディタのインスペクター上でカラーパレットを弄るだけでCubeの色が変わるようになります！
+![Materialの画像](ss_material01.png)
+
 
 ---
 
