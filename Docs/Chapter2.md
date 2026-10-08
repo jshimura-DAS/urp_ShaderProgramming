@@ -419,14 +419,14 @@ Shader "ShaderProgramming/Chapter2/Gouraud01"
 			struct Attributes
 			{
 				float4 positionOS : POSITION;
-				float3 normalOS   : NORMAL;
+				float3 normalOS   : NORMAL;			// 法線情報を追加
 			};
 
 			struct Varyings
 			{
 				float4 positionHCS : SV_POSITION;
-				// 頂点シェーダーで変換したワールド空間法線をフラグメントへ補間して渡す。
-				half3 normalWS     : TEXCOORD0;
+				// 頂点ごとに計算した拡散反射色をフラグメントへ補間して渡す。
+				half3 diffuse      : TEXCOORD0;
 			};
 
 			Varyings vert(Attributes IN)
@@ -434,27 +434,27 @@ Shader "ShaderProgramming/Chapter2/Gouraud01"
 				Varyings OUT;
 				float3 positionWS = TransformObjectToWorld(IN.positionOS.xyz);
 				OUT.positionHCS = TransformWorldToHClip(positionWS);
-				// オブジェクト空間の頂点法線をワールド空間へ変換する。
-				OUT.normalWS = TransformObjectToWorldNormal(IN.normalOS);
+
+				// 頂点ごとに拡散反射を計算する。
+				half3 N = normalize(TransformObjectToWorldNormal(IN.normalOS));
+				Light mainLight = GetMainLight();
+				half3 L = normalize(-mainLight.direction);
+				half NdotL = saturate(dot(N, L));
+				OUT.diffuse = _BaseColor.rgb * mainLight.color * NdotL;
 				return OUT;
 			}
 
 			half4 frag(Varyings IN) : SV_Target
 			{
-				// フラグメントごとにメインライトを取得して拡散反射を計算する。
-				Light mainLight = GetMainLight();
-				half3 L = normalize(-mainLight.direction);
-				half3 N = normalize(IN.normalWS);
-				half NdotL = saturate(dot(N, L));
-
-				// 法線とライト方向の内積をベースカラーへ反映する。
-				half3 diffuse = _BaseColor.rgb * mainLight.color * NdotL;
-				return half4(diffuse, 1.0h);
+				return half4(IN.diffuse, 1.0h);
 			}
 			ENDHLSL
 		}
 	}
 }
+
+
+
 
 
 
