@@ -382,10 +382,89 @@ half3 N = normalize(IN.normalWS);
 
 ## 6. グーローシェーディング実装（Gouraud.shader）
 
+### 6.1 グーローシェーディングの特徴
+グーローシェーディングは、頂点ごとにライティング計算を行い、その結果をピクセル間で補間する手法です。この方法は計算が比較的軽量ですが、頂点数が少ないメッシュでは鏡面反射が粗くなる傾向があります。
+
 グーローシェーディングでは、`vert` 関数で拡散反射と鏡面反射を計算し、計算済みの色 `lighting` を補間して `frag` 関数へ渡します。
 
+### 6.2 実装
+Flatシェーディングの実装と同様に、頂点シェーダーでワールド座標と法線を取得し、メインライトの方向と色を使ってライティング計算を行います。計算結果は `Varyings` の `lighting` に格納され、フラグメントシェーダーではそのまま出力します。
+前記のFlatシェーダーからの変更により実相を試みます。
+
 ```shader
-Shader "ShaderProgramming/Chapter2/Gouraud"
+Shader "ShaderProgramming/Chapter2/Gouraud01"
+{
+	Properties
+	{
+		_BaseColor ("Base Color", Color) = (1,1,1,1)
+	}
+
+	SubShader
+	{
+		Tags { "RenderType"="Opaque" "RenderPipeline"="UniversalPipeline" }
+
+		Pass
+		{
+			HLSLPROGRAM
+			#pragma vertex vert
+			#pragma fragment frag
+
+			#include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+			#include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
+
+			CBUFFER_START(UnityPerMaterial)
+				half4 _BaseColor;
+			CBUFFER_END
+
+			struct Attributes
+			{
+				float4 positionOS : POSITION;
+				float3 normalOS   : NORMAL;
+			};
+
+			struct Varyings
+			{
+				float4 positionHCS : SV_POSITION;
+				// 頂点シェーダーで変換したワールド空間法線をフラグメントへ補間して渡す。
+				half3 normalWS     : TEXCOORD0;
+			};
+
+			Varyings vert(Attributes IN)
+			{
+				Varyings OUT;
+				float3 positionWS = TransformObjectToWorld(IN.positionOS.xyz);
+				OUT.positionHCS = TransformWorldToHClip(positionWS);
+				// オブジェクト空間の頂点法線をワールド空間へ変換する。
+				OUT.normalWS = TransformObjectToWorldNormal(IN.normalOS);
+				return OUT;
+			}
+
+			half4 frag(Varyings IN) : SV_Target
+			{
+				// フラグメントごとにメインライトを取得して拡散反射を計算する。
+				Light mainLight = GetMainLight();
+				half3 L = normalize(-mainLight.direction);
+				half3 N = normalize(IN.normalWS);
+				half NdotL = saturate(dot(N, L));
+
+				// 法線とライト方向の内積をベースカラーへ反映する。
+				half3 diffuse = _BaseColor.rgb * mainLight.color * NdotL;
+				return half4(diffuse, 1.0h);
+			}
+			ENDHLSL
+		}
+	}
+}
+
+
+
+```
+
+
+[別の実装例]
+
+```shader
+Shader "ShaderProgramming/Chapter2/Gouraud02"
 {
 	Properties
 	{
