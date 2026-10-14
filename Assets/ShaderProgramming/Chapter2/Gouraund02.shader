@@ -1,4 +1,4 @@
-Shader "ShaderProgramming/Chapter2/Phong"
+Shader "ShaderProgramming/Chapter2/Gouraud02"
 {
 	Properties
 	{
@@ -35,33 +35,31 @@ Shader "ShaderProgramming/Chapter2/Phong"
 			struct Varyings
 			{
 				float4 positionHCS : SV_POSITION;
-				float3 positionWS  : TEXCOORD0;
-				half3 normalWS     : TEXCOORD1;
+				half3 lighting     : TEXCOORD0;
 			};
 
 			Varyings vert(Attributes IN)
 			{
 				Varyings OUT;
-				OUT.positionWS = TransformObjectToWorld(IN.positionOS.xyz);
-				OUT.positionHCS = TransformWorldToHClip(OUT.positionWS);
-				OUT.normalWS = TransformObjectToWorldNormal(IN.normalOS);
+				float3 positionWS = TransformObjectToWorld(IN.positionOS.xyz);
+				half3 normalWS = normalize(TransformObjectToWorldNormal(IN.normalOS));
+				OUT.positionHCS = TransformWorldToHClip(positionWS);
+
+				Light mainLight = GetMainLight();
+				half3 L = normalize(-mainLight.direction);
+				half3 V = normalize(_WorldSpaceCameraPos.xyz - positionWS);
+				half3 H = normalize(L + V);
+				half NdotL = saturate(dot(normalWS, L));
+				half NdotH = saturate(dot(normalWS, H));
+				OUT.lighting = _BaseColor.rgb * mainLight.color * NdotL
+					+ _SpecColor.rgb * pow(NdotH, _Shininess);
+
 				return OUT;
 			}
 
 			half4 frag(Varyings IN) : SV_Target
 			{
-				Light mainLight = GetMainLight();
-				half3 N = normalize(IN.normalWS);
-				half3 L = normalize(-mainLight.direction);
-				half3 V = normalize(_WorldSpaceCameraPos.xyz - IN.positionWS);
-				half3 H = normalize(L + V);
-
-				half NdotL = saturate(dot(N, L));
-				half NdotH = saturate(dot(N, H));
-				half3 diffuse = _BaseColor.rgb * mainLight.color * NdotL;
-				half3 specular = _SpecColor.rgb * pow(NdotH, _Shininess);
-
-				return half4(diffuse + specular, 1.0h);
+				return half4(IN.lighting, 1.0h);
 			}
 			ENDHLSL
 		}
