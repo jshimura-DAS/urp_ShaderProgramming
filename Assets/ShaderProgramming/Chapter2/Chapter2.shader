@@ -1,4 +1,4 @@
-Shader "ShaderProgramming/Chapter2/LightingBasics"
+﻿Shader "ShaderProgramming/Chapter2/LightingBasics"
 {
 	Properties
 	{
@@ -52,7 +52,7 @@ Shader "ShaderProgramming/Chapter2/LightingBasics"
 				// Gouraud用: 頂点でライティング
 				Light mainLight = GetMainLight();
 				half3 N = normalize(OUT.normalWS);
-				half3 L = normalize(-mainLight.direction);
+				half3 L = normalize(mainLight.direction);
 				half3 V = normalize(_WorldSpaceCameraPos.xyz - OUT.positionWS);
 				half3 H = normalize(L + V);
 
@@ -84,7 +84,7 @@ Shader "ShaderProgramming/Chapter2/LightingBasics"
 					half3 dpdx = ddx(IN.positionWS);
 					half3 dpdy = ddy(IN.positionWS);
 					half3 faceN = normalize(cross(dpdy, dpdx));
-					half3 L = normalize(-mainLight.direction);
+					half3 L = normalize(mainLight.direction);
 
 					half NdotL = saturate(dot(faceN, L));
 					half3 col = _BaseColor.rgb * lightColor * NdotL;
@@ -100,7 +100,7 @@ Shader "ShaderProgramming/Chapter2/LightingBasics"
 				// 3: Phong
 				{
 					half3 N = normalize(IN.normalWS);
-					half3 L = normalize(-mainLight.direction);
+					half3 L = normalize(mainLight.direction);
 					half3 V = normalize(_WorldSpaceCameraPos.xyz - IN.positionWS);
 					half3 H = normalize(L + V);
 

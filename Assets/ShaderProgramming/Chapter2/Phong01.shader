@@ -1,4 +1,4 @@
-Shader "ShaderProgramming/Chapter2/Phong01"
+﻿Shader "ShaderProgramming/Chapter2/Phong01"
 {
 	Properties
 	{
@@ -32,15 +32,13 @@ Shader "ShaderProgramming/Chapter2/Phong01"
 			struct Varyings
 			{
 				float4 positionHCS : SV_POSITION;
-				float3 positionWS  : TEXCOORD0;
-				half3 normalWS     : TEXCOORD1;
+				half3 normalWS     : TEXCOORD0;
 			};
 
 			Varyings vert(Attributes IN)
 			{
 				Varyings OUT;
-				OUT.positionWS = TransformObjectToWorld(IN.positionOS.xyz);
-				OUT.positionHCS = TransformWorldToHClip(OUT.positionWS);
+				OUT.positionHCS = TransformObjectToHClip(IN.positionOS.xyz);
 				OUT.normalWS = TransformObjectToWorldNormal(IN.normalOS);
 				return OUT;
 			}
@@ -49,11 +47,8 @@ Shader "ShaderProgramming/Chapter2/Phong01"
 			{
 				Light mainLight = GetMainLight();
 				half3 N = normalize(IN.normalWS);
-				half3 L = normalize(-mainLight.direction);
-				half3 V = normalize(_WorldSpaceCameraPos.xyz - IN.positionWS);
-				half3 H = normalize(L + V);
+				half3 L = normalize(mainLight.direction);
 				half NdotL = saturate(dot(N, L));
-				half NdotH = saturate(dot(N, H));
 				half3 diffuse = _BaseColor.rgb * mainLight.color * NdotL;
 				return half4(diffuse , 1.0h);
 			}

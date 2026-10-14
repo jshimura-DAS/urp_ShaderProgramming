@@ -1,4 +1,4 @@
-Shader "ShaderProgramming/Chapter2/Phong02"
+﻿Shader "ShaderProgramming/Chapter2/Phong02"
 {
 	Properties
 	{
@@ -52,7 +52,7 @@ Shader "ShaderProgramming/Chapter2/Phong02"
 			{
 				Light mainLight = GetMainLight();
 				half3 N = normalize(IN.normalWS);
-				half3 L = normalize(-mainLight.direction);
+				half3 L = normalize(mainLight.direction);
 				half3 V = normalize(_WorldSpaceCameraPos.xyz - IN.positionWS);
 				half3 H = normalize(L + V);
 				half NdotL = saturate(dot(N, L));

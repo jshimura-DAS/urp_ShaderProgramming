@@ -1,4 +1,4 @@
-Shader "ShaderProgramming/Chapter2/Gouraud02"
+﻿Shader "ShaderProgramming/Chapter2/Gouraud02"
 {
 	Properties
 	{
@@ -46,7 +46,7 @@ Shader "ShaderProgramming/Chapter2/Gouraud02"
 				OUT.positionHCS = TransformWorldToHClip(positionWS);
 
 				Light mainLight = GetMainLight();
-				half3 L = normalize(-mainLight.direction);
+				half3 L = normalize(mainLight.direction);
 				half3 V = normalize(_WorldSpaceCameraPos.xyz - positionWS);
 				half3 H = normalize(L + V);
 				half NdotL = saturate(dot(normalWS, L));

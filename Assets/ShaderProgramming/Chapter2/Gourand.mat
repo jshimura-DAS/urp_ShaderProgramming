@@ -21,7 +21,7 @@ Material:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_Name: Gourand
-  m_Shader: {fileID: 4800000, guid: a5fa6ebff7797fd4dbfcf99aae542afa, type: 3}
+  m_Shader: {fileID: 4800000, guid: 354c726b0e6ed25409ef63dc8bf79c2c, type: 3}
   m_Parent: {fileID: 0}
   m_ModifiedSerializedProperties: 0
   m_ValidKeywords: []
@@ -132,6 +132,6 @@ Material:
     - _BaseColor: {r: 0.49056602, g: 0.31701672, b: 0.31701672, a: 1}
     - _Color: {r: 1, g: 1, b: 1, a: 1}
     - _EmissionColor: {r: 0, g: 0, b: 0, a: 1}
-    - _SpecColor: {r: 0.26104245, g: 0.9811321, b: 0, a: 1}
+    - _SpecColor: {r: 0.268, g: 1, b: 0, a: 1}
   m_BuildTextureStacks: []
   m_AllowLocking: 1

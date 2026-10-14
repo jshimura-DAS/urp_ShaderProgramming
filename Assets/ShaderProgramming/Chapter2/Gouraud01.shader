@@ -1,4 +1,4 @@
-Shader "ShaderProgramming/Chapter2/Gouraud01"
+﻿Shader "ShaderProgramming/Chapter2/Gouraud01"
 {
 	Properties
 	{
@@ -44,7 +44,7 @@ Shader "ShaderProgramming/Chapter2/Gouraud01"
 				// 頂点ごとに拡散反射を計算する。
 				half3 N = normalize(TransformObjectToWorldNormal(IN.normalOS));
 				Light mainLight = GetMainLight();
-				half3 L = normalize(-mainLight.direction);
+				half3 L = normalize(mainLight.direction);
 				half NdotL = saturate(dot(N, L));
 				OUT.diffuse = _BaseColor.rgb * mainLight.color * NdotL;
 				return OUT;

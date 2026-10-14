@@ -1,4 +1,4 @@
-Shader "ShaderProgramming/Chapter2/Flat"
+﻿Shader "ShaderProgramming/Chapter2/Flat"
 {
 	Properties
 	{
@@ -49,7 +49,7 @@ Shader "ShaderProgramming/Chapter2/Flat"
 				half3 dpdy = ddy(IN.positionWS);
 				half3 faceN = normalize(cross(dpdy, dpdx));
 
-				half3 L = normalize(-mainLight.direction);
+				half3 L = normalize(mainLight.direction);
 				half NdotL = saturate(dot(faceN, L));
 
 				half3 diffuse = _BaseColor.rgb * mainLight.color * NdotL;
