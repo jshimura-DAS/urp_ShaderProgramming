@@ -484,7 +484,7 @@ Shader "ShaderProgramming/Chapter4/PhongNormal04"
 
 				half3 N = normalize(IN.normalWS);
 				half3 T = normalize(IN.tangentWS.xyz);
-				half3 B = cross(N, T) * IN.tangentWS.w;
+				half3 B = cross(T,N) * IN.tangentWS.w;
 				half3 normalWS = normalize(TransformTangentToWorld(normalTS, half3x3(T, B, N)));
 				half3 V = normalize(GetCameraPositionWS() - IN.positionWS);
 

@@ -86,6 +86,7 @@ Shader "ShaderProgramming/Chapter4/PhongNormal04"
 			{
 				half4 albedoSample = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, IN.uv) * _BaseColor;
 				half3 normalTS = UnpackNormalScale(SAMPLE_TEXTURE2D(_NormalMap, sampler_NormalMap, IN.uv), _NormalScale);
+				normalTS.xy = -normalTS.xy;
 
 				half3 N = normalize(IN.normalWS);
 				half3 T = normalize(IN.tangentWS.xyz);
