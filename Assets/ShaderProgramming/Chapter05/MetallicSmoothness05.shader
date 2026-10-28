@@ -1,4 +1,4 @@
-Shader "ShaderProgramming/Chapter4/PhongNormal04"
+Shader "ShaderProgramming/Chapter5/MetallicSmoothness05"
 {
 	Properties
 	{
@@ -6,8 +6,9 @@ Shader "ShaderProgramming/Chapter4/PhongNormal04"
 		_BaseColor ("Base Color", Color) = (1,1,1,1)
 		[Normal] _NormalMap ("Normal Map", 2D) = "bump" {}
 		_NormalScale ("Normal Scale", Range(0,2)) = 1
-		_SpecColor ("Specular Color", Color) = (1,1,1,1)
-		_Shininess ("Shininess", Range(1,128)) = 32
+		_MetallicGlossMap ("Metallic (R) Smoothness (A)", 2D) = "white" {}
+		_Metallic ("Metallic", Range(0,1)) = 0
+		_Smoothness ("Smoothness", Range(0,1)) = 0.5
 		_Ambient ("Ambient", Color) = (0.05,0.05,0.05,1)
 	}
 
@@ -32,42 +33,47 @@ Shader "ShaderProgramming/Chapter4/PhongNormal04"
 			SAMPLER(sampler_BaseMap);
 			TEXTURE2D(_NormalMap);
 			SAMPLER(sampler_NormalMap);
+			TEXTURE2D(_MetallicGlossMap);
+			SAMPLER(sampler_MetallicGlossMap);
 
 			CBUFFER_START(UnityPerMaterial)
 				half4 _BaseColor;
-				half4 _SpecColor;
 				half4 _Ambient;
 				float4 _BaseMap_ST;
+				float4 _NormalMap_ST;
+				float4 _MetallicGlossMap_ST;
 				half _NormalScale;
-				half _Shininess;
+				half _Metallic;
+				half _Smoothness;
 			CBUFFER_END
 
 			struct Attributes
 			{
 				float4 positionOS : POSITION;
-				float3 normalOS   : NORMAL;
-				float4 tangentOS  : TANGENT;
-				float2 uv         : TEXCOORD0;
+				float3 normalOS : NORMAL;
+				float4 tangentOS : TANGENT;
+				float2 uv : TEXCOORD0;
 			};
 
 			struct Varyings
 			{
 				float4 positionHCS : SV_POSITION;
-				float3 positionWS  : TEXCOORD0;
-				half3 normalWS     : TEXCOORD1;
-				half4 tangentWS    : TEXCOORD2;
-				float2 uv          : TEXCOORD3;
+				float3 positionWS : TEXCOORD0;
+				half3 normalWS : TEXCOORD1;
+				half4 tangentWS : TEXCOORD2;
+				float2 uv : TEXCOORD3;
 			};
 
-			half3 ShadePhong(Light light, half3 albedo, half3 N, half3 V)
+			half3 ShadePhong(Light light, half3 albedo, half metallic, half smoothness, half3 N, half3 V)
 			{
 				half3 L = normalize(light.direction);
 				half3 H = normalize(L + V);
 				half NdotL = saturate(dot(N, L));
-				half NdotH = saturate(dot(N, H));
 				half3 radiance = light.color * light.distanceAttenuation;
-				half3 diffuse = albedo * radiance * NdotL;
-				half3 specular = _SpecColor.rgb * radiance * pow(NdotH, _Shininess) * step(0.0h, NdotL);
+				half3 diffuse = albedo * (1.0h - metallic) * radiance * NdotL;
+				half3 specularColor = lerp(0.04h.xxx, albedo, metallic);
+				half shininess = lerp(8.0h, 128.0h, smoothness);
+				half3 specular = specularColor * radiance * pow(saturate(dot(N, H)), shininess) * step(0.0h, NdotL);
 				return diffuse + specular;
 			}
 
@@ -78,14 +84,20 @@ Shader "ShaderProgramming/Chapter4/PhongNormal04"
 				OUT.positionHCS = TransformWorldToHClip(OUT.positionWS);
 				OUT.normalWS = TransformObjectToWorldNormal(IN.normalOS);
 				OUT.tangentWS = half4(TransformObjectToWorldDir(IN.tangentOS.xyz), IN.tangentOS.w * GetOddNegativeScale());
-				OUT.uv = TRANSFORM_TEX(IN.uv, _BaseMap);
+				OUT.uv = IN.uv;
 				return OUT;
 			}
 
 			half4 frag(Varyings IN) : SV_Target
 			{
-				half4 albedoSample = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, IN.uv) * _BaseColor;
-				half3 normalTS = UnpackNormalScale(SAMPLE_TEXTURE2D(_NormalMap, sampler_NormalMap, IN.uv), _NormalScale);
+				float2 baseUv = TRANSFORM_TEX(IN.uv, _BaseMap);
+				float2 normalUv = TRANSFORM_TEX(IN.uv, _NormalMap);
+				float2 metallicGlossUv = TRANSFORM_TEX(IN.uv, _MetallicGlossMap);
+				half4 albedoSample = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, baseUv) * _BaseColor;
+				half4 metallicGloss = SAMPLE_TEXTURE2D(_MetallicGlossMap, sampler_MetallicGlossMap, metallicGlossUv);
+				half metallic = metallicGloss.r * _Metallic;
+				half smoothness = metallicGloss.a * _Smoothness;
+				half3 normalTS = UnpackNormalScale(SAMPLE_TEXTURE2D(_NormalMap, sampler_NormalMap, normalUv), _NormalScale);
 
 				half3 N = normalize(IN.normalWS);
 				half3 T = normalize(IN.tangentWS.xyz);
@@ -94,7 +106,7 @@ Shader "ShaderProgramming/Chapter4/PhongNormal04"
 				half3 V = normalize(GetCameraPositionWS() - IN.positionWS);
 
 				half3 color = _Ambient.rgb * albedoSample.rgb;
-				color += ShadePhong(GetMainLight(), albedoSample.rgb, normalWS, V);
+				color += ShadePhong(GetMainLight(), albedoSample.rgb, metallic, smoothness, normalWS, V);
 
 				#if defined(_ADDITIONAL_LIGHTS) || defined(_FORWARD_PLUS)
 				InputData inputData = (InputData)0;
@@ -104,7 +116,7 @@ Shader "ShaderProgramming/Chapter4/PhongNormal04"
 				uint count = GetAdditionalLightsCount();
 				LIGHT_LOOP_BEGIN(count)
 					Light light = GetAdditionalLight(lightIndex, IN.positionWS);
-					color += ShadePhong(light, albedoSample.rgb, normalWS, V);
+					color += ShadePhong(light, albedoSample.rgb, metallic, smoothness, normalWS, V);
 				LIGHT_LOOP_END
 				#endif
 

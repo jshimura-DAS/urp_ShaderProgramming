@@ -241,19 +241,39 @@ GPU に送られる実際の圧縮形式はプラットフォームごとに異�
 
 ### 4.4 `_ST` による Tiling と Offset
 
-2D Properties を宣言すると、Unity は `<TextureName>_ST` を提供します。
+2D Properties を宣言すると、Unity はプロパティごとに `<TextureName>_ST` を提供します。
 
 ```hlsl
 float4 _BaseMap_ST;
-OUT.uv = TRANSFORM_TEX(IN.uv, _BaseMap);
+float4 _NormalMap_ST;
 ```
 
-`_BaseMap_ST` の内容は `(Tiling.x, Tiling.y, Offset.x, Offset.y)` です。  
-`TRANSFORM_TEX` は UV へタイル数とオフセットを適用します。
+各 `_ST` の内容は `(Tiling.x, Tiling.y, Offset.x, Offset.y)` です。  
+`TRANSFORM_TEX` は指定したテクスチャの `_ST` を使い、UV へタイル数とオフセットを適用します。
 
 ```hlsl
 uv = IN.uv * _BaseMap_ST.xy + _BaseMap_ST.zw;
 ```
+
+#### 4.4.1 マップごとの個別設定を反映する
+
+Inspector では `_BaseMap` と `_NormalMap` に、それぞれ別の **Tiling** と **Offset** を設定できます。個別設定を実際のサンプリングへ反映するには、各テクスチャ専用の UV を作ります。
+
+```hlsl
+// vert
+OUT.baseUv = TRANSFORM_TEX(IN.uv, _BaseMap);
+OUT.normalUv = TRANSFORM_TEX(IN.uv, _NormalMap);
+
+// frag
+half4 albedoSample = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, IN.baseUv) * _BaseColor;
+half3 normalTS = UnpackNormalScale(
+	SAMPLE_TEXTURE2D(_NormalMap, sampler_NormalMap, IN.normalUv),
+	_NormalScale);
+```
+
+`PhongNormal04.shader` はこの個別 UV 方式です。たとえば Base Map の Tiling を `(1, 1)`、Normal Map の Tiling を `(4, 4)` にすると、色模様は 1 回だけ貼られ、細かな凹凸だけが 4 回繰り返されます。
+
+反対に、両方を同じ配置にしたい場合は、Normal Map にも `baseUv` を渡してサンプリングします。ただしその場合は `_NormalMap_ST` を使わないため、Inspector で変更した Normal Map 側の Tiling／Offset は反映されません。**Inspector に個別の設定欄を出す 2D プロパティは、個別の `TRANSFORM_TEX` と UV を用意する**ことが重要です。
 
 ---
 
@@ -326,7 +346,7 @@ URP では画像フォーマットや圧縮を考慮して `UnpackNormalScale` �
 
 ```hlsl
 half3 normalTS = UnpackNormalScale(
-	SAMPLE_TEXTURE2D(_NormalMap, sampler_NormalMap, IN.uv),
+	SAMPLE_TEXTURE2D(_NormalMap, sampler_NormalMap, IN.normalUv),
 	_NormalScale);
 ```
 
@@ -433,6 +453,7 @@ Shader "ShaderProgramming/Chapter4/PhongNormal04"
 				half4 _SpecColor;
 				half4 _Ambient;
 				float4 _BaseMap_ST;
+				float4 _NormalMap_ST;
 				half _NormalScale;
 				half _Shininess;
 			CBUFFER_END
@@ -451,7 +472,8 @@ Shader "ShaderProgramming/Chapter4/PhongNormal04"
 				float3 positionWS  : TEXCOORD0;
 				half3 normalWS     : TEXCOORD1;
 				half4 tangentWS    : TEXCOORD2;
-				float2 uv          : TEXCOORD3;
+				float2 baseUv      : TEXCOORD3;
+				float2 normalUv    : TEXCOORD4;
 			};
 
 			half3 ShadePhong(Light light, half3 albedo, half3 N, half3 V)
@@ -473,14 +495,15 @@ Shader "ShaderProgramming/Chapter4/PhongNormal04"
 				OUT.positionHCS = TransformWorldToHClip(OUT.positionWS);
 				OUT.normalWS = TransformObjectToWorldNormal(IN.normalOS);
 				OUT.tangentWS = half4(TransformObjectToWorldDir(IN.tangentOS.xyz), IN.tangentOS.w * GetOddNegativeScale());
-				OUT.uv = TRANSFORM_TEX(IN.uv, _BaseMap);
+				OUT.baseUv = TRANSFORM_TEX(IN.uv, _BaseMap);
+				OUT.normalUv = TRANSFORM_TEX(IN.uv, _NormalMap);
 				return OUT;
 			}
 
 			half4 frag(Varyings IN) : SV_Target
 			{
-				half4 albedoSample = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, IN.uv) * _BaseColor;
-				half3 normalTS = UnpackNormalScale(SAMPLE_TEXTURE2D(_NormalMap, sampler_NormalMap, IN.uv), _NormalScale);
+				half4 albedoSample = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, IN.baseUv) * _BaseColor;
+				half3 normalTS = UnpackNormalScale(SAMPLE_TEXTURE2D(_NormalMap, sampler_NormalMap, IN.normalUv), _NormalScale);
 
 				half3 N = normalize(IN.normalWS);
 				half3 T = normalize(IN.tangentWS.xyz);
