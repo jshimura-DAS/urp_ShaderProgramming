@@ -38,7 +38,7 @@ Shader "ShaderProgramming/Chapter4/PhongNormal04"
 				half4 _SpecColor;
 				half4 _Ambient;
 				float4 _BaseMap_ST;
-				float4 _NormalMap_ST;
+				float4 _NormalMap_ST;	// Normal map tiling and offset
 				half _NormalScale;
 				half _Shininess;
 			CBUFFER_END
@@ -57,8 +57,7 @@ Shader "ShaderProgramming/Chapter4/PhongNormal04"
 				float3 positionWS  : TEXCOORD0;
 				half3 normalWS     : TEXCOORD1;
 				half4 tangentWS    : TEXCOORD2;
-				float2 baseUv      : TEXCOORD3;
-				float2 normalUv    : TEXCOORD4;
+				float2 uv          : TEXCOORD3;
 			};
 
 			half3 ShadePhong(Light light, half3 albedo, half3 N, half3 V)
@@ -80,19 +79,23 @@ Shader "ShaderProgramming/Chapter4/PhongNormal04"
 				OUT.positionHCS = TransformWorldToHClip(OUT.positionWS);
 				OUT.normalWS = TransformObjectToWorldNormal(IN.normalOS);
 				OUT.tangentWS = half4(TransformObjectToWorldDir(IN.tangentOS.xyz), IN.tangentOS.w * GetOddNegativeScale());
-				OUT.baseUv = TRANSFORM_TEX(IN.uv, _BaseMap);
-				OUT.normalUv = TRANSFORM_TEX(IN.uv, _NormalMap);
+				OUT.uv = IN.uv;
 				return OUT;
 			}
 
 			half4 frag(Varyings IN) : SV_Target
 			{
-				half4 albedoSample = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, IN.baseUv) * _BaseColor;
-				half3 normalTS = UnpackNormalScale(SAMPLE_TEXTURE2D(_NormalMap, sampler_NormalMap, IN.normalUv), _NormalScale);
+				float2 baseUv = TRANSFORM_TEX(IN.uv, _BaseMap);
+				float2 normalUv = TRANSFORM_TEX(IN.uv, _NormalMap);
+				
+				half4 albedoSample = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, baseUv) * _BaseColor;
+				half3 normalTS = UnpackNormalScale(SAMPLE_TEXTURE2D(_NormalMap, sampler_NormalMap, normalUv), _NormalScale);
+				//normalTS.xy = -normalTS.xy;
 
 				half3 N = normalize(IN.normalWS);
 				half3 T = normalize(IN.tangentWS.xyz);
-				half3 B = cross(N, T) * IN.tangentWS.w;
+				// half3 B = cross(N, T) * IN.tangentWS.w;
+				half3 B = cross(T,N) * IN.tangentWS.w;
 				half3 normalWS = normalize(TransformTangentToWorld(normalTS, half3x3(T, B, N)));
 				half3 V = normalize(GetCameraPositionWS() - IN.positionWS);
 
