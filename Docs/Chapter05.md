@@ -75,6 +75,30 @@ MetallicGlossMap = (Metallic, unused, unused, Smoothness)
 
 Chapter5 は PBR 前の段階なので、値を Phong の拡散反射・鏡面反射へ近似的に対応させます。
 
+データを読み込むコードは次の通りです。マップデータの追加とパラメータの追加、既存の_specColorと_Shinnessを削除します。
+
+
+```hlsl
+	Properties
+	{
+		_BaseMap ("Albedo Map", 2D) = "white" {}
+		_BaseColor ("Base Color", Color) = (1,1,1,1)
+		[Normal] _NormalMap ("Normal Map", 2D) = "bump" {}
+		_NormalScale ("Normal Scale", Range(0,2)) = 1
+		_MetallicGlossMap ("Metallic (R) Smoothness (A)", 2D) = "white" {}
+		_Metallic ("Metallic", Range(0,1)) = 0
+		_Smoothness ("Smoothness", Range(0,1)) = 0.5
+		_Ambient ("Ambient", Color) = (0.05,0.05,0.05,1)
+	}
+```
+
+
+SubShaderのPassに変更を加えます。
+
+
+
+
+
 ```hlsl
 half4 metallicGloss = SAMPLE_TEXTURE2D(_MetallicGlossMap, sampler_MetallicGlossMap, IN.uv);
 half metallic = metallicGloss.r * _Metallic;
