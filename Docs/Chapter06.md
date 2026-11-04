@@ -13,6 +13,21 @@
 - URP/Lit の Forward パスと共通 HLSL の役割を説明できる
 - `shader_feature` と `multi_compile` の用途を区別できる
 
+### 1.1 実習手順と観察ポイント
+
+1. `Chapter06.unity` を開き、比較対象オブジェクトのマテリアルを確認する
+2. `Assets/ShaderProgramming/Chapter06/Transparent06.shader` からマテリアル `Transparent06` を作成する
+3. Base Color の Alpha を `1.0` から `0.3` などへ下げ、透明化の変化を確認する
+4. Metallic / Smoothness / Base Map Alpha を個別に調整し、見た目変化の原因を分離して観察する
+
+`Chapter06.unity` の初期配置は、比較観察しやすいように次の構成になっています。
+
+- Sphere: `SurfaceInputs05`（`SphereMaterial`）
+- Cube と Plane: URP/Lit
+- 2つの Cube: `Transparent06`
+
+最初に Sphere（Chapter 05）と Transparent06 の反射差を見比べ、その後に Alpha を下げて透明描画の挙動を確認すると、PBR 化と透明化の違いを切り分けやすくなります。
+
 ## 2. Chapter 05 のシェーダーと URP/Lit の違い
 
 `Assets/ShaderProgramming/Chapter05/SurfaceInputs05.shader` は、アルベド、法線、Metallic、Smoothness、AO、Emission などの値を `SurfaceInputs` に集めます。その後、`ShadePhong` がライトごとの色を計算します。
@@ -21,7 +36,7 @@
 | :--- | :--- | :--- |
 | マテリアル入力 | `InitializeSurfaceInputs` で取得 | `InitializeStandardLitSurfaceData` で取得 |
 | 反射モデル | Phong の拡散反射・鏡面反射 | Metallic/Specular ワークフローに対応した BRDF |
-| ライト計算 | 教材内の `ShadePhong` | `UniversalFragmentPBR` と `LightingPhysicallyBased` など |
+| ライト計算 | 教材内の `ShadePhong` | `UniversalFragmentPBR` と `LightingPhysicallyBased` など（GGX 系をベースにした最適化近似） |
 | 描画機能 | 主に Universal Forward | Forward、ShadowCaster、DepthOnly、GBuffer など複数のパス |
 | マテリアル設定 | シェーダー内の固定値が中心 | Inspector がキーワード、描画キュー、Blend、ZWrite などを更新 |
 | 汎用性 | 学習対象を絞った実装 | ライト、GI、シャドウ、デカール、インスタンシングなどと連携 |
@@ -41,10 +56,12 @@ half3 diffuse = albedo * radiance * NdotL;
 ここで `NdotL = saturate(dot(N, L))` です。BRDF として扱う場合、Lambert 拡散反射は `albedo / π` で正規化します。
 
 ```hlsl
-float3 diffuseBRDF = albedo * (1.0 - metallic) / 3.14159265;
+float3 diffuseBRDF = (1.0 - F) * (1.0 - metallic) * albedo / 3.14159265;
 ```
 
-`1 / π` は半球全体へ反射するエネルギーが過大にならないようにする係数です。ここでは金属の拡散反射をなくす近似として `(1 - metallic)` を掛けています。
+`1 / π` は半球全体へ反射するエネルギーが過大にならないようにする係数です。ここでは金属の拡散反射をなくす近似として `(1 - metallic)` を掛け、さらに `(1 - F)` で鏡面反射へ回った分のエネルギーを拡散側から差し引きます（簡易的なエネルギー保存）。
+
+> 注意: この章の実装は拡散項に `1/π` を入れるため、同じライト設定でも URP/Lit や Chapter 05 より見た目が暗くなります。URP の標準ライトは実質的に `π` を掛けた慣習値で扱われ、URP/Lit の拡散項には `1/π` が直接入りません。たとえば `_Ambient = 0.05` は `0.05 / π ≒ 0.016` まで下がります。
 
 ### 3.2 Cook-Torrance の鏡面反射
 
@@ -65,7 +82,7 @@ Metallic ワークフローでは、正面から見た鏡面反射率 `F0` を�
 float3 F0 = lerp(float3(0.04, 0.04, 0.04), albedo, metallic);
 ```
 
-Smoothness はこの章では簡易的に `roughness = 1 - smoothness` と変換します。URP/Lit は perceptual roughness と roughness を区別し、計算上の下限や数値安定性への配慮も加えています。
+この章で `roughness` と呼んでいる値は、URP でいう `perceptualRoughness` に相当します。式中の `alpha = roughness * roughness` が、GGX 計算に使う実効的な roughness（分布パラメータ）です。URP/Lit も perceptual roughness と roughness を区別し、計算上の下限や数値安定性への配慮を加えています。
 
 ## 4. `Surface Type` と Transparent の仕組み
 
@@ -114,7 +131,7 @@ flowchart TD
     B -->|Queue <= 2500 Opaque| C[Opaque 描画パス]
     B -->|Queue >= 2501 Transparent| D[Transparent 描画パス]
 
-    C --> C1[前後関係のない順序で描画<br/>（パフォーマンス優先）]
+    C --> C1[カメラ近傍から遠方へソートして描画<br/>（Front-to-Back）]
     C1 --> C2[ZWrite On<br/>Depth Buffer へ深度を書き込む]
     C2 --> E[(Depth Buffer)]
 
@@ -171,7 +188,7 @@ flowchart TD
 
     F4 --> F5[InitializeInputData<br/>法線・視線・シャドウ座標・<br/>Fog Factor をまとめる]
 
-    F5 --> F6[UniversalFragmentPBR<br/>直接光 + 間接光を計算<br/>（Cook-Torrance BRDF）]
+    F5 --> F6[UniversalFragmentPBR<br/>直接光 + 間接光を計算<br/>（GGX 系をベースにした最適化 BRDF）]
 
     F6 --> F7[MixFog<br/>Fog を適用]
     F7 --> F8[OutputAlpha<br/>Surface Type に応じて<br/>Alpha を保持/破棄]
@@ -188,6 +205,8 @@ flowchart TD
 ## 6. `SurfaceInputs05.shader` から `Transparent06.shader` を作る
 
 完成成果物は `Assets/ShaderProgramming/Chapter06/Transparent06.shader` です。次の手順は、Chapter 05 のどのファイルのどの関数・Pass を編集するかを示します。コードを個別に書き換えて検証する場合も、最後に完成版と同じ状態になるようにしてください。
+
+見た目の変化要因を切り分けるため、まず **Opaque のまま PBR 化** を確認し、その後に Transparent 化する順序を推奨します。具体的には、段階 1 → 3 → 4 → 5 → 6 → 7 → 8 を先に適用して Opaque PBR 版を確認し、最後に段階 2 の Transparent 設定を適用します。
 
 ### 段階 1：Chapter 05 のシェーダーを複製する
 
@@ -254,7 +273,7 @@ Clear Coat 値が構造体に残っていても Cook-Torrance に自動で反映
 
 ### 段階 5：`ShadePhong` 関数全体を Cook-Torrance に置き換える
 
-`SurfaceInputs05.shader` の147行目付近、`half3 ShadePhong(...)` から関数末尾の `}` までを削除し、同じ場所に以下を追加します。GGX NDF、Schlick-GGX Geometry 近似、Schlick Fresnel を組み合わせた教材用の実装です。
+`SurfaceInputs05.shader` の `half3 ShadePhong(...)` 関数定義全体（開始行から対応する `}` まで）を削除し、同じ場所に以下を追加します。手順 3・4 の適用後は行番号が変わるため、関数名を基準に特定してください。GGX NDF、Schlick-GGX Geometry 近似、Schlick Fresnel を組み合わせた教材用の実装です。
 
 ```hlsl
 half3 ShadeCookTorrance(Light light, SurfaceInputs surface, half3 N, half3 V)
@@ -297,6 +316,15 @@ half3 ShadeCookTorrance(Light light, SurfaceInputs surface, half3 N, half3 V)
 
 Chapter 05 の `pow(saturate(dot(N, H)), shininess)` による Phong ハイライトと違い、この関数は D・G・F の項を組み合わせます。`max` の下限はゼロ除算を避けるためのものです。
 
+### 段階 5.5：Opaque PBR の中間確認
+
+段階 2（Transparent 化）をまだ適用していない場合、この時点で見た目差分を確認します。
+
+- 変わる要素: BRDF（Phong → Cook-Torrance）、`1/π` 正規化、Fresnel
+- 変わらない要素: Render Queue、Blend、ZWrite
+
+この確認を入れると、「暗くなった理由が PBR 化か、透明化か」を分離して検証できます。
+
 ### 段階 6：`frag` の AO と Main Light の計算を更新する
 
 `half4 frag(Varyings IN)` 内で法線をワールド空間へ変換した後、Chapter 05 では次のように環境光と Main Light を計算しています。
@@ -327,6 +355,18 @@ color += ShadeCookTorrance(GetAdditionalLight(lightIndex, IN.positionWS), surfac
 
 つまり、Chapter 05 の `ShadePhong(...) * surface.occlusion` を `ShadeCookTorrance(...)` に置き換えます。Additional Lights の取得とループ構造は維持し、Main Light と同じ Cook-Torrance 関数を使います。
 
+Forward+ では `LIGHT_LOOP_BEGIN` が `InputData` を参照するため、`frag` 内に次の宣言を残してください。
+
+```hlsl
+InputData inputData = (InputData)0;
+inputData.positionWS = IN.positionWS;
+inputData.normalWS = N;
+inputData.viewDirectionWS = V;
+inputData.normalizedScreenSpaceUV = GetNormalizedScreenSpaceUV(IN.positionCS);
+```
+
+この章のシェーダーは Forward+ の全フィールドを使いませんが、ループマクロの展開上、最小限の `InputData` が必要です。
+
 ### 段階 8：`frag` の戻り値で Emission と Alpha を維持する
 
 `frag` の末尾の次の行は残します。
@@ -336,6 +376,10 @@ return half4(color + surface.emission, surface.alpha);
 ```
 
 `surface.alpha` は Base Map と `_BaseColor` から取得します。これが Pass の `Blend SrcAlpha OneMinusSrcAlpha` に渡されます。透明オブジェクトが交差する場合など、Transparent の描画順による制約は残ります。
+
+補足として、本文の `light.shadowAttenuation` は現状の呼び出し（`GetMainLight()` と `GetAdditionalLight(lightIndex, IN.positionWS)`）では実質 1 のままで、Chapter 06 では影の減衰に効きません。シャドウ座標を使う呼び出しや ShadowCaster/DepthOnly パスは Chapter 07 以降で扱います。
+
+また、この `Transparent06.shader` には ShadowCaster/DepthOnly パスを実装していないため、透明オブジェクトはこの章の時点で影を落としません。
 
 ### 段階 9：完成版の対応関係を確認する
 
