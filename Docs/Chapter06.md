@@ -119,6 +119,47 @@ URP は Render Queue を使って描画対象を分類します。通常の流�
 3. 透明物は背景色とブレンドする
 4. 通常は透明物自身の深度を書き込まない
 
+#### Render Queue と 2500 の境界
+
+Render Queue は単なる任意の整数ではなく、Unity があらかじめ定義した名前付きの基準値を持っています。
+
+| Queue 名 | 値 | 用途 |
+| --- | --- | --- |
+| `Background` | 1000 | スカイボックスなど最初に描く背景 |
+| `Geometry` | 2000 | 通常の不透明オブジェクト（デフォルト） |
+| `AlphaTest` | 2450 | Alpha Clip（カットアウト）を使う不透明寄りのオブジェクト |
+| `Transparent` | 3000 | 半透明オブジェクト |
+| `Overlay` | 4000 | UI など最後に描く要素 |
+
+この表からわかるように、**2500** という境界は `AlphaTest`（2450）と `Transparent`（3000）のちょうど中間に位置する値です。URP の `FilteringSettings` は `RenderQueueRange` を使って Opaque パスと Transparent パスの対象を分けますが、その定義は次のようになっています。
+
+- Opaque 用の `RenderQueueRange`：`minimum = 0`、`maximum = 2500`
+- Transparent 用の `RenderQueueRange`：`minimum = 2501`、`maximum = 5000`
+
+つまり「2500」はコード上で定数として決められた閾値であり、`AlphaTest`（2450）までは Opaque 側、`Transparent`（3000）以降は Transparent 側に収まるように設計されています。
+
+**どのタイミングで値が設定されるか**
+
+マテリアルの `renderQueue` は、以下のタイミングで決定・反映されます。
+
+1. シェーダーの `Tags { "Queue" = "Geometry" }` のように、SubShader タグでデフォルト値が宣言される
+2. マテリアルを作成した時点で、そのデフォルト値が `Material.renderQueue` にコピーされる（Inspector 上では「Surface Type」が Opaque か Transparent かで自動的に `Geometry` か `Transparent` が選ばれる）
+3. スクリプトから `material.renderQueue = 2500;` のように実行時に明示的へ上書きすることも可能
+4. `CommandBuffer.DrawRenderer` など描画時にマテリアルが参照され、そのときの `renderQueue` 値を使って `DrawObjectsPass` がフィルタリングを行う
+
+つまり、Render Queue はシェーダーコンパイル時ではなく、**マテリアルがその値を保持しており、描画パスが実行される毎フレーム、フィルタリング時に参照される**という仕組みです。そのため、スクリプトから動的に `renderQueue` を変更すれば、実行時に Opaque/Transparent の扱いを切り替えることもできます。
+
+**オブジェクトの Queue が 2500 を超える場合どうなるか**
+
+あるオブジェクトのマテリアルが `renderQueue = 2501` 以上（例えば `Transparent` = 3000）を持つ場合、そのオブジェクトは次のように扱われます。
+
+- Opaque 用 `RenderQueueRange`（0〜2500）には含まれないため、Opaque 描画パスの対象から除外される
+- Transparent 用 `RenderQueueRange`（2501〜5000）に含まれるため、Transparent 描画パスの対象になる
+- Transparent パスでは奥から手前へのソートが行われ、ZWrite Off・Blend 処理が適用される（4.2 冒頭の図を参照）
+- 深度バッファへの書き込みは行われないため、後から描画される他の Transparent オブジェクトはこのオブジェクトの深度でクリップされない（ソートアーティファクトの原因になりうる）
+
+逆に、本来 Opaque のつもりで作ったマテリアルの `renderQueue` を誤って 2501 以上に設定してしまうと、意図せず ZWrite Off のまま Transparent パスで描画されてしまい、深度が書き込まれない・不透明なのに背景と変にブレンドされるといった不具合につながることがあるため注意が必要です。
+
 深度テストと深度書き込みは別の設定です。Transparent は通常 `ZWrite Off` ですが、Opaque が書いた深度との比較は引き続き行います。そのため、壁の後ろにある透明物は壁の深度によって隠れます。一方、透明物どうしの重なりはソート順に影響され、交差する透明面などは正確に解決できないことがあります。
 
 URP の `DrawObjectsPass` は Render Queue 範囲と ShaderTag を使って対象を選びます。`UniversalForward` は Forward 描画対象を識別する LightMode の一つです。マテリアルの Transparent 設定は、シェーダーのブレンド状態を変えるだけでなく、描画キューによる分類にも関係します。
