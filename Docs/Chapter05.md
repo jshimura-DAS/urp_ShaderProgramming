@@ -151,9 +151,9 @@ Emission はライトが当たらない場所にも加算されます。ネオ�
 `Properties` に`_Cutoff`を追加します。
 
 ```hlsl
-		_EmissionColor ("Emission Color", Color) = (0,0,0,1)
-		_Cutoff ("Alpha Cutoff", Range(0,1)) = 0.5　		// 0.5 未満の A は描画しない
-		_Ambient ("Ambient", Color) = (0.05,0.05,0.05,1)
+	_EmissionColor ("Emission Color", Color) = (0,0,0,1)
+	_Cutoff ("Alpha Cutoff", Range(0,1)) = 0.5　		// 0.5 未満の A は描画しない
+	_Ambient ("Ambient", Color) = (0.05,0.05,0.05,1)
 ```
 
 ```hlsl
