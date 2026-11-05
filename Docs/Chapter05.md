@@ -148,14 +148,23 @@ Emission はライトが当たらない場所にも加算されます。ネオ�
 
 `Assets/ShaderProgramming/Chapter5/AlphaClip05.shader` は、Emission 段階に `_Cutoff` と `clip` だけを加えます。Base Map の A チャンネルを使って、しきい値未満のピクセルを描画しません。
 
-`Properties` に`_Cutoff`を追加します。
 
+CBUFFERに追加します。
+
+```hlsl
+				half _OcclusionStrength;
+				half _Cutoff;		// 追加：Alpha Clip のしきい値
+			CBUFFER_END
+```
+
+`Properties` に`_Cutoff`を追加します。
 ```hlsl
 	_EmissionColor ("Emission Color", Color) = (0,0,0,1)
 	_Cutoff ("Alpha Cutoff", Range(0,1)) = 0.5　		// 0.5 未満の A は描画しない
 	_Ambient ("Ambient", Color) = (0.05,0.05,0.05,1)
 ```
 
+フラグメントシェーダーに `clip` を追加します。
 ```hlsl
 half4 albedoSample = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, IN.uv) * _BaseColor;
 clip(albedoSample.a - _Cutoff);
