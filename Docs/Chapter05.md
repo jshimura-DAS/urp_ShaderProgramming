@@ -251,4 +251,4 @@ Clear Coat は追加の Phong ハイライトで近似しています。URP/Lit 
 - Metallic／Smoothness は拡散反射、鏡面反射色、ハイライトの鋭さを変える
 - AO は遮蔽による暗さ、Emission は自己発光、Alpha Clip は輪郭の切り抜きを追加する
 - `SurfaceInputs05.shader` は段階実装の入力を整理し、Parallax／Detail／Clear Coat まで統合する
-- Chapter6 では同じ入力を PBR の Cook-Torrance BRDF と環境反射へ接続する
+- Chapter6 では同じ入力を PBR の Cook-Torrance BRDF と Transparent 描画へ接続する（Reflection Probe などの環境反射は次章以降で扱う）
