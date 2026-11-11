@@ -1,4 +1,4 @@
-# Chapter 07：シャドウイング（カスケードシャドウマップ）
+﻿# Chapter 07：シャドウイング（カスケードシャドウマップ）
 
 この章は `URPシェーダープログラミングindex.md` の Chapter 07 に対応します。Chapter 06 で作成した `Transparent06.shader`（PBR / Cook-Torrance 実装）を出発点に、シャドウの受け取り処理を追加していきます。あわせて、DirectX で実装したカスケードシャドウマップの概念が、Unity / URP でどのように抽象化・自動化されているかを対比しながら解説します。
 
@@ -91,7 +91,7 @@ for (int areaNo = 0; areaNo < NUM_SHADOW_MAP; areaNo++)
 
 以下に、バイアスなしの場合にシャドウアクネが発生する様子と、バイアスを適用して解消する様子を図解します。
 
-![シャドウアクネとバイアス補正の関係](shadow_acne.svg)
+](images/shadow_acne.svg)
 
 このイラストの左側のように、斜面自身がライトから見て「自分の少し手前にある自分自身」によって遮蔽されたと誤判定されるのがシャドウアクネです。これを数式で表すと、シャドウマップから読み取った深度を `shadowMapDepth`、比較対象となるピクセル自身のライト空間深度を `pixelDepth` としたとき、通常の深度比較は次のようになります。
 
@@ -152,7 +152,9 @@ Shadow Resolution は、すべてのカスケード（および Additional Light
 
 Mesh Renderer コンポーネントの `Cast Shadows`（Off / On / Two Sided / Shadows Only）と `Receive Shadows` の各オプションが、ShadowCasterPass への参加可否とシェーダー内でのシャドウ減衰の適用可否にどう対応するかを解説します。
 
-`Cast Shadows` を `Off` にしたオブジェクトは、`MainLightShadowCasterPass` / `AdditionalLightsShadowCasterPass` のフィルタリングから除外され、そもそもシャドウマップへ深度を書き込みません。`On` では通常通り描画され、`Two Sided` は裏面カリングを無視して両面から深度を書き込むため、薄いオブジェクト（葉や布など）の抜けを防げます。`Shadows Only` は、通常のカメラ視点（Forward パス）には描画されず、シャドウマップへの深度書き込みだけ行う特殊なモードで、見えない位置にある「影専用のダミーオブジェクト」を作るのに使えます。一方 `Receive Shadows` を無効にすると、そのオブジェクトのシェーダーは ShadowCoord をサンプリングしてもシャドウアテニュエーションを無視する（常に1として扱う）よう URP 側のキーワードが制御され、影を受け取らなくなります。これは Chapter 07 の7章で実装する `Shadow07.shader` のシャドウ減衰計算が、実は Mesh Renderer のこのフラグと連動していることを意味します。
+> 注意: URP/Lit では `Receive Shadows` が `_RECEIVE_SHADOWS_OFF` キーワードとして反映されますが、自作シェーダーでは `#pragma shader_feature_local_fragment _RECEIVE_SHADOWS_OFF` を宣言し、キーワード有効時に `shadowAttenuation` を 1 にする処理を自分で書かない限り連動しません。`Shadow07.shader` では実装しないため、`Receive Shadows` の設定に関わらず影を受けます。
+
+`Cast Shadows` を `Off` にしたオブジェクトは
 
 ### 4.2 Light コンポーネントのシャドウ設定
 
@@ -180,7 +182,7 @@ Rendering Layers は、GameObject 側に設定する「レンダリングレイ�
 
 頂点シェーダーでワールド座標からシャドウ座標（ライト空間での UV + 深度）を計算する `TransformWorldToShadowCoord` などの URP ユーティリティ関数と、カスケードごとのシャドウ空間への変換処理を解説します。
 
-DirectX 実装では、カスケードごとのクロップ行列をライトビュープロジェクション行列に乗算する処理で示したように、頂点のワールド座標を「どのカスケードのライト空間へ変換するか」を描画側で選びながら、その行列をシェーダーに渡していました。URP の `TransformWorldToShadowCoord` 関数は、この一連の処理を1回の呼び出しに集約したユーティリティで、内部では現在のピクセル（頂点）がどのカスケードに属するかを View 空間の深度から判定し、該当するカスケードのライトビュープロジェクション行列（`_MainLightWorldToShadow` 配列の要素）を選んでワールド座標に乗算し、ライト空間での UV 座標と深度を含む `float4` を返します。`Shadow07.shader` では、頂点シェーダーの出力に `float4 shadowCoord : TEXCOORD_SHADOWCOORD` のようなセマンティクスを追加し、この関数の戻り値をそのまま格納しておくことで、フラグメントシェーダー側で深度比較に利用できるようにします。
+`float4 shadowCoord : TEXCOORD4` のようなセマンティクス（7.2 参照。`TEXCOORD_SHADOWCOORD` というセマンティクスは存在しません）
 
 ### 5.2 `MainLightRealtimeShadow` とシャドウアテニュエーション
 
@@ -235,8 +237,9 @@ Chapter 06 で確認したように、`Transparent06.shader` の `UniversalForwa
 | 頂点出力構造体（Varyings） | ワールド座標・法線・UV などを保持 | `float4 shadowCoord` フィールドを追加 |
 | 頂点シェーダー（vert） | ワールド座標・法線変換まで | 末尾で `TransformWorldToShadowCoord` を呼び `shadowCoord` を格納 |
 | `InitializeSurfaceInputs` | Albedo/Normal/Metallic 等の取得 | 変更なし |
-| `ShadeCookTorrance` | Cook-Torrance による直接光計算 | 返り値、またはライト強度にシャドウアテニュエーションを乗算する処理を追加 |
-| `frag` | `ShadeCookTorrance` の結果を出力 | `MainLightRealtimeShadow(input.shadowCoord)` を取得し `ShadeCookTorrance` へ渡す／乗算する |
+| `ShadeCookTorrance` | `light.shadowAttenuation` を既に乗算済み | 変更なし（二重乗算を避けるため追加の乗算はしない） |
+| `frag` | `GetMainLight()`（常に shadowAttenuation = 1） | `GetMainLight(IN.shadowCoord)` に変更し、影の減衰を有効にする |
+| `#pragma` | シャドウ関連の `multi_compile` なし | `_MAIN_LIGHT_SHADOWS*`、`_SHADOWS_SOFT` を追加（7.2 Step 5） |
 | `ShadowCaster` Pass | なし（Transparent06 は Forward Pass のみ） | URP/Lit の `ShadowCaster` Pass を追加し、自身も Caster として振る舞えるようにする |
 
 この対応表からわかる通り、変更の中心は「頂点シェーダーで ShadowCoord を1つ追加する」「フラグメントシェーダーでシャドウアテニュエーションを取得し直接光に乗算する」の2点であり、Chapter 06 で組み上げた Cook-Torrance の計算ロジック自体には手を加えません。
@@ -332,12 +335,80 @@ Varyings vert(Attributes IN)
 
 この時点では、ShadowCoord を計算して `Varyings` へ格納しているだけで、まだこの値をどこにも使っていません。そのため、`Shadow07.shader` をこの段階でビルドしてシーンに適用しても、見た目は `Transparent06.shader` と変わらず、影はまだ反映されません。次の 7.3 で、フラグメントシェーダー側がこの `shadowCoord` を実際に参照し、シャドウアテニュエーションとして直接光の計算に反映させます。
 
+**Step 5：シャドウ用の `multi_compile` を追加する**
+
+UniversalForward Pass の既存の `#pragma multi_compile` の並びに、次の行を追加します。これが無いと影の計算が無効化され、`MainLightRealtimeShadow` は常に 1 を返して影が出ません。
+
+```hlsl
+#pragma multi_compile _ _MAIN_LIGHT_SHADOWS _MAIN_LIGHT_SHADOWS_CASCADE _MAIN_LIGHT_SHADOWS_SCREEN
+#pragma multi_compile_fragment _ _SHADOWS_SOFT
+```
+
 ### 7.3 シャドウアテニュエーションの取得と反映
 
-フラグメントシェーダー内で ShadowCoord からシャドウアテニュエーションを取得し、`ShadeCookTorrance` が返す直接光の結果に乗算することで、影が落ちた部分を暗くする処理を実装する手順を解説します。
+Chapter 06 の `ShadeCookTorrance` は `light.shadowAttenuation` をすでに `radiance` へ乗算しています。ただし `GetMainLight()`（引数なし）では `shadowAttenuation` が常に 1 になるため、Chapter 06 では影が効きません。そこで `frag` 内の Main Light の取得を、`shadowCoord` を渡す形へ変更するだけで影が有効になります。
 
-`frag` 関数内で、`MainLightRealtimeShadow(input.shadowCoord)` を呼び出し、0〜1 のシャドウアテニュエーション値を取得します。Chapter 06 の `ShadeCookTorrance` は、直接光（Main Light）の Diffuse 項と Specular 項を合成した色を返す関数として実装されていたため、最も単純な組み込み方は、この関数の戻り値に対してシャドウアテニュエーションを乗算することです。あるいは、`ShadeCookTorrance` の引数として渡しているライトの強度（`light.color` 相当の値）へあらかじめシャドウアテニュエーションを乗算してから関数を呼び出す方法でも、同じ結果が得られます。環境光（間接光）の項は、この乗算の対象に含めないよう注意してください。シャドウはあくまで直接光が遮蔽されることを表すものであり、間接光まで一律に暗くしてしまうと、影の中が不自然に真っ黒になってしまいます。この一点を除けば、Chapter 06 までの Cook-Torrance 計算ロジックへの変更は不要です。
+```hlsl
+// 変更前
+color += ShadeCookTorrance(GetMainLight(), surface, N, V);
 
+// 変更後
+Light mainLight = GetMainLight(IN.shadowCoord);
+color += ShadeCookTorrance(mainLight, surface, N, V);
+```
+
+> 注意: `MainLightRealtimeShadow` の結果を `ShadeCookTorrance` の戻り値へ別途乗算すると、関数内の乗算と合わせて二重適用になり、影が過剰に暗くなります。乗算は `ShadeCookTorrance` 内の 1 箇所だけにしてください。
+
+環境光 `ambientDiffuse` は影の対象に含めません。影は直接光の遮蔽を表すため、環境光まで暗くすると影の中が不自然に真っ黒になります。Additional Light の影は 5.4 のとおり別の呼び出し（シャドウ用の引数付き）が必要で、本章では Main Light のみ対応します。
+
+（Chapter06.md は同様に修正済み）
+
+### 7.3.1 ShadowCaster Pass の追加
+
+7.1 の表のとおり、Transparent06 は Forward Pass のみで、影を受けることはできても落とすことはできません。自身を Caster にするため、SubShader 内（Forward Pass の後）へ次の Pass を追加します。
+
+```hlsl
+Pass
+{
+    Name "ShadowCaster"
+    Tags { "LightMode"="ShadowCaster" }
+    ZWrite On
+    ZTest LEqual
+    ColorMask 0
+    Cull Back
+
+    HLSLPROGRAM
+    #pragma vertex ShadowPassVertex
+    #pragma fragment ShadowPassFragment
+    #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+    #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Shadows.hlsl"
+
+    float3 _LightDirection;
+    float3 _LightPosition;
+
+    struct ShadowAttributes { float4 positionOS : POSITION; float3 normalOS : NORMAL; };
+    struct ShadowVaryings { float4 positionCS : SV_POSITION; };
+
+    ShadowVaryings ShadowPassVertex(ShadowAttributes input)
+    {
+        float3 positionWS = TransformObjectToWorld(input.positionOS.xyz);
+        float3 normalWS = TransformObjectToWorldNormal(input.normalOS);
+    #if _CASTING_PUNCTUAL_LIGHT_SHADOW
+        float3 lightDirectionWS = normalize(_LightPosition - positionWS);
+    #else
+        float3 lightDirectionWS = _LightDirection;
+    #endif
+        ShadowVaryings output;
+        output.positionCS = TransformWorldToHClip(ApplyShadowBias(positionWS, normalWS, lightDirectionWS));
+        return output;
+    }
+
+    half4 ShadowPassFragment(ShadowVaryings input) : SV_TARGET { return 0; }
+    ENDHLSL
+}
+```
+
+この ShadowCaster は Alpha を参照しないため、半透明でも影はくっきり落ちます（6.3）。Alpha に応じて抜く場合は、頂点出力に UV を追加して `ShadowPassFragment` で `clip` を行います。URP のバージョンによっては `ApplyShadowClamping` が必要・利用可能な場合がありますが、本教材では使用しません。
 ### 7.4 完成シェーダーの確認
 
 完成した `Shadow07.shader` をシーンに適用し、Chapter 06 の `Transparent06` との見た目の違い（影の有無、ソフトシャドウの効き具合）を比較して確認する手順をまとめます。

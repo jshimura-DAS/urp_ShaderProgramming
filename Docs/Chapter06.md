@@ -403,7 +403,7 @@ InputData inputData = (InputData)0;
 inputData.positionWS = IN.positionWS;
 inputData.normalWS = N;
 inputData.viewDirectionWS = V;
-inputData.normalizedScreenSpaceUV = GetNormalizedScreenSpaceUV(IN.positionCS);
+GetNormalizedScreenSpaceUV(IN.positionHCS)
 ```
 
 この章のシェーダーは Forward+ の全フィールドを使いませんが、ループマクロの展開上、最小限の `InputData` が必要です。
