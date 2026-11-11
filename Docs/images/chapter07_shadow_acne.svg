@@ -1,0 +1,73 @@
+<svg width="960" height="520" viewBox="0 0 960 520" xmlns="http://www.w3.org/2000/svg" font-family="Yu Gothic, Meiryo, sans-serif">
+  <rect x="0" y="0" width="960" height="520" fill="#ffffff" />
+  <text x="480" y="28" text-anchor="middle" font-size="20" font-weight="bold" fill="#222">シャドウアクネとバイアス補正の関係</text>
+
+  <!-- ============ 左側：バイアスなし（アクネ発生） ============ -->
+  <g>
+	<text x="230" y="58" text-anchor="middle" font-size="15" font-weight="bold" fill="#b5272a">バイアスなし：シャドウアクネが発生</text>
+
+	<!-- ライト -->
+	<circle cx="380" cy="90" r="18" fill="#ffd34d" stroke="#c99a00" stroke-width="2" />
+	<text x="380" y="122" text-anchor="middle" font-size="12" fill="#222">Light</text>
+
+	<!-- 斜面（レシーバー兼キャスター：自己遮蔽） -->
+	<polygon points="90,300 370,230 370,260 90,330" fill="#c9b37c" stroke="#7a6a44" stroke-width="2" />
+	<text x="150" y="350" font-size="12" fill="#222">斜面（Shadow Receiver）</text>
+
+	<!-- シャドウマップのテクセル分割線（粗い離散化を表現） -->
+	<g stroke="#7a6a44" stroke-width="1" stroke-dasharray="2,3">
+	  <line x1="130" y1="292" x2="128" y2="322" />
+	  <line x1="170" y1="282" x2="168" y2="312" />
+	  <line x1="210" y1="272" x2="208" y2="302" />
+	  <line x1="250" y1="262" x2="248" y2="292" />
+	  <line x1="290" y1="252" x2="288" y2="282" />
+	  <line x1="330" y1="242" x2="328" y2="272" />
+	</g>
+
+	<!-- ライトからの光線（テクセル境界で階段状に深度が記録されるイメージ） -->
+	<line x1="380" y1="108" x2="150" y2="306" stroke="#e0a800" stroke-width="1.5" stroke-dasharray="5,3" />
+	<line x1="380" y1="108" x2="230" y2="266" stroke="#e0a800" stroke-width="1.5" stroke-dasharray="5,3" />
+	<line x1="380" y1="108" x2="310" y2="247" stroke="#e0a800" stroke-width="1.5" stroke-dasharray="5,3" />
+
+	<!-- 誤って自己遮蔽と判定される箇所（アクネの縞） -->
+	<rect x="145" y="296" width="18" height="10" fill="#333" fill-opacity="0.55" />
+	<rect x="225" y="256" width="18" height="10" fill="#333" fill-opacity="0.55" />
+	<rect x="305" y="238" width="18" height="10" fill="#333" fill-opacity="0.55" />
+
+	<text x="230" y="400" text-anchor="middle" font-size="12" fill="#b5272a" font-weight="bold">テクセル単位の深度の階段状誤差により</text>
+	<text x="230" y="418" text-anchor="middle" font-size="12" fill="#b5272a" font-weight="bold">斜面自身が自分を遮蔽 → 縞状のノイズ（アクネ）</text>
+  </g>
+
+  <!-- 区切り線 -->
+  <line x1="480" y1="50" x2="480" y2="460" stroke="#ccc" stroke-width="1" />
+
+  <!-- ============ 右側：バイアスあり（補正後） ============ -->
+  <g>
+	<text x="730" y="58" text-anchor="middle" font-size="15" font-weight="bold" fill="#1a7a3a">Depth Bias 適用：アクネが解消</text>
+
+	<circle cx="880" cy="90" r="18" fill="#ffd34d" stroke="#c99a00" stroke-width="2" />
+	<text x="880" y="122" text-anchor="middle" font-size="12" fill="#222">Light</text>
+
+	<polygon points="590,300 870,230 870,260 590,330" fill="#c9b37c" stroke="#7a6a44" stroke-width="2" />
+	<text x="650" y="350" font-size="12" fill="#222">斜面（Shadow Receiver）</text>
+
+	<!-- 比較に使う深度をわずかに奥へオフセット（矢印で図示） -->
+	<line x1="650" y1="290" x2="650" y2="275" stroke="#1a7a3a" stroke-width="2.5" marker-end="url(#arrow)" />
+	<text x="700" y="282" font-size="11" fill="#1a7a3a">+bias 分だけ奥へオフセット</text>
+
+	<line x1="880" y1="108" x2="650" y2="296" stroke="#e0a800" stroke-width="1.5" stroke-dasharray="5,3" />
+	<line x1="880" y1="108" x2="730" y2="266" stroke="#e0a800" stroke-width="1.5" stroke-dasharray="5,3" />
+	<line x1="880" y1="108" x2="810" y2="247" stroke="#e0a800" stroke-width="1.5" stroke-dasharray="5,3" />
+
+	<text x="730" y="400" text-anchor="middle" font-size="12" fill="#1a7a3a" font-weight="bold">比較用の深度に bias を加算したことで</text>
+	<text x="730" y="418" text-anchor="middle" font-size="12" fill="#1a7a3a" font-weight="bold">離散化誤差を吸収し、自己遮蔽と判定されなくなる</text>
+  </g>
+
+  <defs>
+	<marker id="arrow" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto">
+	  <path d="M0,0 L8,4 L0,8 Z" fill="#1a7a3a" />
+	</marker>
+  </defs>
+
+  <text x="480" y="450" text-anchor="middle" font-size="13" fill="#555">bias が大きすぎると、今度は影の付け根が地面から浮く「ピーターパンニング」が発生する（本文参照）</text>
+</svg>

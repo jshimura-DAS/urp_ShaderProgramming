@@ -1,0 +1,73 @@
+<svg width="900" height="560" viewBox="0 0 900 560" xmlns="http://www.w3.org/2000/svg" font-family="Yu Gothic, Meiryo, sans-serif">
+  <!-- 背景 -->
+  <rect x="0" y="0" width="900" height="560" fill="#ffffff" />
+
+  <!-- タイトル -->
+  <text x="450" y="30" text-anchor="middle" font-size="20" font-weight="bold" fill="#222">ライト・シャドウキャスター・シャドウレシーバーの位置関係とZバッファ</text>
+
+  <!-- 地面（Shadow Receiver） -->
+  <rect x="80" y="420" width="740" height="30" fill="#c9b37c" stroke="#7a6a44" stroke-width="2" />
+  <text x="450" y="475" text-anchor="middle" font-size="16" fill="#222">Shadow Receiver（影を受ける側：地面）</text>
+
+  <!-- Shadow Caster（直方体） -->
+  <g>
+	<rect x="360" y="300" width="100" height="120" fill="#5b7fb5" stroke="#2c4f7c" stroke-width="2" />
+	<polygon points="360,300 390,280 490,280 460,300" fill="#7ea0d6" stroke="#2c4f7c" stroke-width="2" />
+	<polygon points="460,300 490,280 490,400 460,420" fill="#4a6ea3" stroke="#2c4f7c" stroke-width="2" />
+	<text x="410" y="265" text-anchor="middle" font-size="16" fill="#222">Shadow Caster</text>
+	<text x="410" y="285" text-anchor="middle" font-size="13" fill="#555">（影を落とす側）</text>
+  </g>
+
+  <!-- ライト（右上、平行光源） -->
+  <g>
+	<circle cx="700" cy="90" r="26" fill="#ffd34d" stroke="#c99a00" stroke-width="2" />
+	<text x="700" y="96" text-anchor="middle" font-size="22">☀</text>
+	<text x="700" y="135" text-anchor="middle" font-size="15" fill="#222" font-weight="bold">Light</text>
+	<text x="700" y="153" text-anchor="middle" font-size="12" fill="#555">（ライト視点のカメラ）</text>
+  </g>
+
+  <!-- ライトから地面への平行光線（複数本） -->
+  <line x1="650" y1="115" x2="430" y2="420" stroke="#e0a800" stroke-width="2" stroke-dasharray="6,4" />
+  <line x1="690" y1="115" x2="490" y2="420" stroke="#e0a800" stroke-width="2" stroke-dasharray="6,4" />
+  <line x1="730" y1="115" x2="560" y2="420" stroke="#e0a800" stroke-width="2" stroke-dasharray="6,4" />
+  <!-- Caster に当たって遮られる光線 -->
+  <line x1="668" y1="115" x2="445" y2="305" stroke="#e0372a" stroke-width="2.5" />
+  <!-- 影になる領域（Casterの背後） -->
+  <polygon points="445,305 460,420 300,420 270,418" fill="#333333" fill-opacity="0.35" />
+  <text x="340" y="440" text-anchor="middle" font-size="13" fill="#222" font-weight="bold">影（Shadow）</text>
+
+  <!-- ライト視点の深度比較ラベル -->
+  <text x="610" y="220" font-size="13" fill="#b5650d" font-weight="bold">① ライトから見た深度</text>
+  <text x="610" y="238" font-size="12" fill="#b5650d">Caster の深度 Z_caster（近い）</text>
+  <text x="610" y="254" font-size="12" fill="#b5650d">Receiver の深度 Z_receiver（遠い）</text>
+  <text x="610" y="272" font-size="12" fill="#b5650d" font-weight="bold">→ Z_caster &lt; Z_receiver なら影</text>
+
+  <!-- カメラ（左側、通常視点） -->
+  <g>
+	<rect x="60" y="230" width="50" height="34" rx="4" fill="#444" />
+	<polygon points="110,235 140,247 110,259" fill="#444" />
+	<text x="85" y="285" text-anchor="middle" font-size="15" fill="#222" font-weight="bold">📷</text>
+	<text x="85" y="300" text-anchor="middle" font-size="14" fill="#222" font-weight="bold">Camera</text>
+	<text x="85" y="316" text-anchor="middle" font-size="11" fill="#555">（通常の視点）</text>
+  </g>
+
+  <!-- カメラから見た視線（Caster, Receiver 両方の深度を取得） -->
+  <line x1="120" y1="247" x2="360" y2="340" stroke="#2a6fe0" stroke-width="2" />
+  <line x1="120" y1="247" x2="200" y2="420" stroke="#2a6fe0" stroke-width="2" />
+  <text x="150" y="350" font-size="12" fill="#1a4fa0" font-weight="bold">② カメラから見た深度</text>
+  <text x="150" y="366" font-size="11" fill="#1a4fa0">（通常の Z バッファ判定）</text>
+
+  <!-- 凡例 -->
+  <g>
+	<rect x="80" y="500" width="16" height="16" fill="#5b7fb5" stroke="#2c4f7c" />
+	<text x="104" y="513" font-size="13" fill="#222">Shadow Caster（影を落とす側オブジェクト）</text>
+
+	<rect x="400" y="500" width="16" height="16" fill="#c9b37c" stroke="#7a6a44" />
+	<text x="424" y="513" font-size="13" fill="#222">Shadow Receiver（影を受ける側オブジェクト）</text>
+
+	<line x1="650" y1="535" x2="680" y2="535" stroke="#e0a800" stroke-width="2" stroke-dasharray="6,4" />
+	<text x="690" y="540" font-size="13" fill="#222">ライトからの平行光線</text>
+  </g>
+
+  <text x="450" y="548" text-anchor="middle" font-size="12" fill="#555">①ライト視点の深度比較でシャドウマップを生成し、②カメラ視点の通常描画でそのシャドウマップを参照して影を判定する</text>
+</svg>
