@@ -91,7 +91,7 @@ for (int areaNo = 0; areaNo < NUM_SHADOW_MAP; areaNo++)
 
 以下に、バイアスなしの場合にシャドウアクネが発生する様子と、バイアスを適用して解消する様子を図解します。
 
-![シャドウアクネとバイアス補正の関係](images/chapter07_shadow_acne.svg)
+![シャドウアクネとバイアス補正の関係](shadow_acne.svg)
 
 このイラストの左側のように、斜面自身がライトから見て「自分の少し手前にある自分自身」によって遮蔽されたと誤判定されるのがシャドウアクネです。これを数式で表すと、シャドウマップから読み取った深度を `shadowMapDepth`、比較対象となるピクセル自身のライト空間深度を `pixelDepth` としたとき、通常の深度比較は次のようになります。
 
@@ -117,9 +117,9 @@ URP がシャドウマップを生成する専用パス（Main Light 用の `Mai
 
 URP では、シーンのレンダリングが始まると `ScriptableRenderer` がいくつかの `ScriptableRenderPass` を順に実行します。シャドウマップの生成を担当するのが `MainLightShadowCasterPass`（ディレクショナルライト用）と `AdditionalLightsShadowCasterPass`（ポイント/スポットライト用）で、これらは通常の `UniversalForward` のパスよりも前に実行され、シーン内の `Cast Shadows` が有効なオブジェクトだけを対象にライト視点で深度を書き込みます。この処理は、サンプル実装で `sampleDrawShadowMap.fx` を使って個別に描画していた処理と同じ役割であり、URP ではシェーダー側に `Tags { "LightMode" = "ShadowCaster" }` を持つ Pass を用意しておくだけで、このパスがどのライトのどのカスケードに対しても自動的に呼び出されるようになっています。つまり DirectX 実装で `InitShadowCaster` として明示的に書いていた「シャドウマップ専用の描画ループ」が、URP では LightMode タグを介した規約（コンベンション）に置き換わっている、と理解すると対応がつきやすくなります。
 
-### 3.2
+### 3.2 URP のカスケード設定（Pipeline Asset の Shadows セクション）
 
-Universal Render Pipeline Asset の Shadows セクションにある設定項目（Cascade Count、Depth Bias、Normal Bias など）を確認し、DX12 で手動設定していたパラメータが Inspector 上でどの項目に対応するかを整理します。
+Universal Render Pipeline Asset
 
 Pipeline Asset の Lighting > Shadows セクションには、主に次のような項目が並んでいます。
 
@@ -132,15 +132,15 @@ Pipeline Asset の Lighting > Shadows セクションには、主に次のよう
 
 これらは、サンプル実装で言えば `NUM_SHADOW_MAP`（Cascade Count に相当）、`cascadeAreaTbl`（Split に相当）、シャドウマップ比較時に加算していたオフセット値（Depth/Normal Bias に相当）を、スクリプトを書かずに Inspector から調整できるようにしたものです。DirectX 実装ではこれらの値をソースコードの定数や構造体として管理していましたが、URP では Pipeline Asset という ScriptableObject にシリアライズされており、実行時にアセットを切り替えるだけで異なるシャドウ品質設定（PCやモバイル向けなど）を使い分けられる点が大きな違いです。
 
-### 3.3
+### 3.3 シャドウカスケードの分割比率とカスケード数
 
-カスケード数（1〜4）と分割比率スライダーの意味、各カスケードがカバーする距離範囲がシーンのスケールや光源の角度でどう変化するかを解説します。2.2 で扱った分割方式との対応関係を明示します。
+カスケード数（1〜4）と分割比率スライダーの意味
 
 Cascade Count を増やすほど、視錐台をより細かい区間に分割できるため、近景のシャドウ解像度を保ちながら遠景まで影を届かせやすくなりますが、その分シャドウマップの生成コスト（ドローコール数、Atlas の使用量）も増加します。分割比率スライダー（2 Cascades なら1つ、4 Cascades なら3つのスライダー）は、Max Distance を100%として、そのうちどこまでを何番目のカスケードに割り当てるかを表しており、サンプル実装の `cascadeAreaTbl` に収められている「各エリアの Near 側の距離」と同じ役割を持ちます。一般的には、近いカスケードほど狭い範囲を高解像度で、遠いカスケードほど広い範囲を低解像度でカバーするように、分割比率を手前に寄せる（対数分割に近づける）設定がよく使われます。これは、人間の目が近くのオブジェクトの影のジャギーには敏感である一方、遠くの影の解像度低下には気づきにくいという視覚特性を踏まえた調整です。光源の角度（太陽の高度）が変わると、同じカスケード分割でもライト視点の視錐台の形状が変化するため、浅い角度の光ではカスケードの境界がより目立ちやすくなる点にも注意が必要です。
 
-### 3.4
+### 3.4 シャドウ解像度・距離・バイアスのパラメータ
 
-Shadow Resolution（Atlas 解像度）、Max Distance、Distance Fade、Depth/Normal Bias が実際の見た目（シャドウアクネ、ピーターパンニング、遠景でのシャドウ消失）にどう影響するかを、2.3 の内容と関連付けながら解説します。
+Shadow Resolution（Atlas 解像度）
 
 Shadow Resolution は、すべてのカスケード（および Additional Light 分）のシャドウマップをまとめて格納する1枚の Atlas テクスチャの解像度を指定します。Cascade Count を増やしても Atlas 解像度が据え置きであれば、1カスケードあたりに割り当てられるテクセル数は減ってしまうため、カスケード数と Atlas 解像度はセットで調整する必要があります。Max Distance を伸ばすと、より遠くまで影が届く代わりに、各カスケード（特に最遠カスケード）がカバーする実距離が伸び、テクセル密度が下がってシャドウの輪郭が粗くなります。Distance Fade は、この Max Distance の境界で影が突然消えることによる違和感を抑えるため、境界手前から徐々に影を薄くするものです。Depth Bias / Normal Bias は2.3で確認したシャドウアクネ対策・ピーターパンニング対策と全く同じ意味を持ちますが、URP ではカスケードごとに自動でテクセルサイズに応じたスケーリングがある程度行われるため、DirectX 実装のように全カスケードで手動調整する手間は軽減されています。とはいえ、極端に Bias を上げ下げすると、依然としてアクネやパンニングが発生するため、2.3で学んだトレードオフの考え方自体は変わりません。
 
@@ -243,9 +243,94 @@ Chapter 06 で確認したように、`Transparent06.shader` の `UniversalForwa
 
 ### 7.2 ShadowCoord 生成処理の追加
 
-頂点シェーダーの出力構造体へ ShadowCoord 用のセマンティクスを追加し、`TransformWorldToShadowCoord` を使ってワールド座標からシャドウ座標を計算する処理を組み込む手順を解説します。
+Step By Step で確認します。
 
-まず `Varyings` 構造体に `float4 shadowCoord : TEXCOORD_SHADOWCOORD` のようなフィールドを追加します。次に頂点シェーダー（`vert`）の末尾、ワールド座標（`positionWS`）が確定したあとで、`output.shadowCoord = TransformWorldToShadowCoord(positionWS);` を呼び出します。`TransformWorldToShadowCoord` は URP の `ShaderLibrary/Shadows.hlsl` に定義されているユーティリティ関数で、内部ではカスケードの判定、該当するライトビュープロジェクション行列の選択、そしてワールド座標からライト空間座標への変換までを一度に行います。カスケードシャドウが無効な場合（Cascade Count = 1、あるいはシャドウ自体が無効な場合）は、内部でコンパイル時にカスケード判定処理が省略されるようシェーダーバリアントが切り替わるため、同じコードのままどちらの設定でも動作します。この処理を追加するだけでは、まだ ShadowCoord を計算しているだけでシャドウは反映されないため、次の7.3でフラグメントシェーダー側の対応を行います。
+**Step 1：必要なインクルードを確認する**
+
+`Transparent06.shader` は、すでに次の2つの `#include` を持っています。
+
+```hlsl
+#include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+#include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
+```
+
+`TransformWorldToShadowCoord` や `MainLightRealtimeShadow` は URP の `Shadows.hlsl` に定義されていますが、この関数は `Lighting.hlsl` から内部的にインクルードされているため、`Shadow07.shader` でも新しく `#include` を追加する必要はありません。Step 1 は「追加なし・変更なし」であることを確認するだけで完了です。
+
+**Step 2：`Varyings` 構造体へ ShadowCoord フィールドを追加する**
+
+`Transparent06.shader` の `Varyings` 構造体は次のようになっています。
+
+```hlsl
+struct Varyings
+{
+    float4 positionHCS : SV_POSITION;
+    float3 positionWS : TEXCOORD0;
+    half3 normalWS : TEXCOORD1;
+    half4 tangentWS : TEXCOORD2;
+    float2 uv : TEXCOORD3;
+};
+```
+
+ここに、シャドウ座標を格納するための `float4 shadowCoord` フィールドを1つ追加します。既存の `TEXCOORD0`〜`TEXCOORD3` を使い切っているため、セマンティクスは次の空き番号である `TEXCOORD4` を割り当てます。
+
+```hlsl
+struct Varyings
+{
+    float4 positionHCS : SV_POSITION;
+    float3 positionWS : TEXCOORD0;
+    half3 normalWS : TEXCOORD1;
+    half4 tangentWS : TEXCOORD2;
+    float2 uv : TEXCOORD3;
+    float4 shadowCoord : TEXCOORD4; // 追加：ライト空間でのシャドウ座標
+};
+```
+
+この1行が、頂点シェーダーからフラグメントシェーダーへシャドウ座標を橋渡しするための「容れ物」になります。
+
+**Step 3：頂点シェーダー（`vert`）に計算処理を追加する**
+
+`Transparent06.shader` の `vert` 関数は次のようになっています。
+
+```hlsl
+Varyings vert(Attributes IN)
+{
+    Varyings OUT;
+    OUT.positionWS = TransformObjectToWorld(IN.positionOS.xyz);
+    OUT.positionHCS = TransformWorldToHClip(OUT.positionWS);
+    OUT.normalWS = TransformObjectToWorldNormal(IN.normalOS);
+    OUT.tangentWS = half4(TransformObjectToWorldDir(IN.tangentOS.xyz), IN.tangentOS.w * GetOddNegativeScale());
+    OUT.uv = TRANSFORM_TEX(IN.uv, _BaseMap);
+    return OUT;
+}
+```
+
+`OUT.positionWS` が確定した直後に、次の1行を追加します。
+
+```hlsl
+Varyings vert(Attributes IN)
+{
+    Varyings OUT;
+    OUT.positionWS = TransformObjectToWorld(IN.positionOS.xyz);
+    OUT.positionHCS = TransformWorldToHClip(OUT.positionWS);
+    OUT.normalWS = TransformObjectToWorldNormal(IN.normalOS);
+    OUT.tangentWS = half4(TransformObjectToWorldDir(IN.tangentOS.xyz), IN.tangentOS.w * GetOddNegativeScale());
+    OUT.uv = TRANSFORM_TEX(IN.uv, _BaseMap);
+    OUT.shadowCoord = TransformWorldToShadowCoord(OUT.positionWS); // 追加：ShadowCoord の生成
+    return OUT;
+}
+```
+
+この1行が実装している内容は、5.1 で解説した通り、(1) 現在の頂点がどのカスケードに属するかを View 空間の深度から判定し、(2) 該当するカスケードのライトビュープロジェクション行列（`_MainLightWorldToShadow` 配列の要素）を選択し、(3) ワールド座標 `positionWS` にその行列を乗算してライト空間の UV 座標・深度を算出する、という3つの処理です。DirectX 実装で言えば、カスケード描画ループ内で行っていた「クロップ行列を乗算したライトビュープロジェクション行列をワールド座標に適用する」処理に相当します。
+
+**Step 4：ここまでの差分のまとめ**
+
+| 変更箇所 | Transparent06.shader | Shadow07.shader |
+| --- | --- | --- |
+| インクルード | `Core.hlsl` / `Lighting.hlsl` のみ | 変更なし（`Shadows.hlsl` は `Lighting.hlsl` 経由で利用可能） |
+| `Varyings` 構造体 | `TEXCOORD0`〜`TEXCOORD3` の4フィールド | `float4 shadowCoord : TEXCOORD4` を追加 |
+| `vert` 関数 | ワールド座標・法線・UV の変換のみ | 末尾に `OUT.shadowCoord = TransformWorldToShadowCoord(OUT.positionWS);` を追加 |
+
+この時点では、ShadowCoord を計算して `Varyings` へ格納しているだけで、まだこの値をどこにも使っていません。そのため、`Shadow07.shader` をこの段階でビルドしてシーンに適用しても、見た目は `Transparent06.shader` と変わらず、影はまだ反映されません。次の 7.3 で、フラグメントシェーダー側がこの `shadowCoord` を実際に参照し、シャドウアテニュエーションとして直接光の計算に反映させます。
 
 ### 7.3 シャドウアテニュエーションの取得と反映
 
