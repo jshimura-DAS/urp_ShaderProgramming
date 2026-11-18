@@ -7,7 +7,7 @@ public class OutlineRendererFeature : ScriptableRendererFeature
     [System.Serializable]
     public class Settings
     {
-        public RenderPassEvent renderPassEvent = RenderPassEvent.AfterRenderingPostProcessing;
+        public RenderPassEvent renderPassEvent = RenderPassEvent.BeforeRenderingPostProcessing;
         public Shader shader;
         public Color outlineColor = Color.black;
         [Range(0f, 0.2f)] public float threshold = 0.02f;
@@ -25,6 +25,11 @@ public class OutlineRendererFeature : ScriptableRendererFeature
         // 古いマテリアルを破棄してから作り直す（インスペクター変更時にも呼ばれる）
         CoreUtils.Destroy(_material);
         _material = settings.shader != null ? CoreUtils.CreateEngineMaterial(settings.shader) : null;
+
+        // 値が 0 のままだと画面全体がアウトライン色になるため範囲内に収める
+        settings.threshold = Mathf.Clamp(settings.threshold, 0.001f, 0.2f);
+        settings.sharpness = Mathf.Clamp(settings.sharpness, 1f, 50f);
+        settings.thickness = Mathf.Clamp(settings.thickness, 0.5f, 4f);
 
         _pass = new OutlinePass
         {

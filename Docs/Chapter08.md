@@ -399,6 +399,8 @@ Shader "ShaderProgramming/Chapter8/OutlineFullscreen08"
 			#pragma vertex Vert
 			#pragma fragment Frag
 
+			// URP の基本定義（_ZBufferParams など）。DeclareDepthTexture.hlsl より先に取り込む
+			#include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
 			// Blit 用の頂点シェーダーと _BlitTexture の宣言を取り込む
 			#include "Packages/com.unity.render-pipelines.core/Runtime/Utilities/Blit.hlsl"
 			// _CameraDepthTexture へのアクセス（SampleSceneDepth）を取り込む
@@ -564,7 +566,7 @@ public class OutlineRendererFeature : ScriptableRendererFeature
     [System.Serializable]
     public class Settings
     {
-        public RenderPassEvent renderPassEvent = RenderPassEvent.AfterRenderingPostProcessing;
+        public RenderPassEvent renderPassEvent = RenderPassEvent.BeforeRenderingPostProcessing;
         public Shader shader;
         public Color outlineColor = Color.black;
         [Range(0f, 0.2f)] public float threshold = 0.02f;
@@ -582,6 +584,11 @@ public class OutlineRendererFeature : ScriptableRendererFeature
         // 古いマテリアルを破棄してから作り直す（インスペクター変更時にも呼ばれる）
         CoreUtils.Destroy(_material);
         _material = settings.shader != null ? CoreUtils.CreateEngineMaterial(settings.shader) : null;
+
+        // 値が 0 のままだと画面全体がアウトライン色になるため範囲内に収める
+        settings.threshold = Mathf.Clamp(settings.threshold, 0.001f, 0.2f);
+        settings.sharpness = Mathf.Clamp(settings.sharpness, 1f, 50f);
+        settings.thickness = Mathf.Clamp(settings.thickness, 0.5f, 4f);
 
         _pass = new OutlinePass
         {
@@ -616,7 +623,7 @@ public class OutlineRendererFeature : ScriptableRendererFeature
 1. Project ウィンドウで `Assets/Settings/PC_Renderer.asset` をクリックして選択する
 2. Inspector の一番下付近にある **Add Renderer Feature** ボタンを押し、表示されたメニューから **OutlineRendererFeature** を選ぶ
 3. 追加された `Outline Renderer Feature` の項目で、**Shader** 欄に `ShaderProgramming/Chapter8/OutlineFullscreen08` を割り当てる（Project の `OutlineFullscreen08.shader` をドラッグ＆ドロップしてもよい）
-4. **Render Pass Event** が `After Rendering Post Processing` になっていることを確認する
+4. **Render Pass Event** が `Before Rendering Post Processing` になっていることを確認する（シリアライズ済みの値はコードの既定値を変えても更新されないため、手動で変更する）
 5. Outline Color・Threshold・Sharpness・Thickness の初期値を確認する（初期値は 5.6 の表を参照）
 6. 必要に応じて `Assets/Settings/Mobile_Renderer.asset` にも手順 1〜5 を行う
 
@@ -626,7 +633,7 @@ public class OutlineRendererFeature : ScriptableRendererFeature
 
 1. `Chapter08.unity` を開き、球・立方体・平面を配置する（それぞれ異なる奥行きに置くと違いが見やすい）
 2. Game ビューで、物体の縁に黒い線が出ていることを確認する
-3. Frame Debugger で `Outline08` が `AfterRenderingPostProcessing` 付近に表示されていることを確認する
+3. Frame Debugger で `Outline08` が `BeforeRenderingPostProcessing` 付近に表示され、その下に `Draw Procedural` が 2 つ（アウトライン描画と書き戻し）あることを確認する
 
 **パラメーターの調整**
 
@@ -643,7 +650,8 @@ public class OutlineRendererFeature : ScriptableRendererFeature
 | :--- | :--- |
 | 線が出ない | Renderer Data に Feature が登録されていない、Shader 欄が空、Depth Texture が無効（Pipeline Asset の Depth Texture を確認） |
 | 画面全体が線で埋まる | Threshold が小さすぎる、または深度テクスチャの値が想定と違う（`_ZBufferParams` の使用を確認） |
-| 画面が黒く潰れる | `_BlitTexture` の参照先が誤っている。Blitter の引数の順番（source と destination）を確認 |
+| 画面が黒く潰れる | 次の 3 点を順に確認する。(1) `OutlineFullscreen08` のコンパイルエラー：`Core.hlsl` を `DeclareDepthTexture.hlsl` より先に include していないとエラーになり、1 回目の Blit が描画されず `_OutlineTemp` が黒のまま書き戻される。Frame Debugger の `Outline08` 下の `Draw Procedural` が 1 つしかなければこれを疑い、シェーダーの Inspector でエラーを確認する。(2) Threshold / Sharpness / Thickness が 0 で保存されている（Renderer Data の値を確認）。(3) `_BlitTexture` の参照先（Blitter の source と destination の順番）が誤っている |
+| 診断用に `return half4(mask.xxx, 1);` へ変えたまま | エッジが白、それ以外が黒のマスク画像になり、明度が反転したように見える。`lerp` の結果を返す元の記述に戻す。Outline Color が白だと線も白になる |
 | ピンクのオブジェクトが出る | OutlineFullscreen08 のコンパイルエラー。Console を確認 |
 | UI の上にも線が出る | 想定どおり。UI を除外したい場合は、Overlay 前に挿入するか、描画対象を別 Camera に分ける |
 
@@ -970,6 +978,7 @@ Shader "ShaderProgramming/Chapter8/Stealth08"
 - `visibility` が 0 のとき `clip` の判定は `0 - threshold` となり、閾値は常に正のため、全ピクセルが破棄されます。つまり、本体は完全に消えます。
 - 一方、縁の `fresnel` が 1 に近いと `visibility` が 1 に近づき、縁だけがディザなしで描かれます。
 - `_Visibility` を 0.05 程度にすると、縁だけがうっすら見える「ゴースト」状態になります。
+- このシェーダーは Renderer Feature ではなく**通常のマテリアル用**です。使い方（マテリアルの作成、Cube への割り当て、C# のアタッチ先）は 7.4 にまとめています。
 
 ### 7.3 C# による制御
 
@@ -1031,7 +1040,96 @@ public class StealthController : MonoBehaviour
 - `Mathf.MoveTowards` で値を少しずつ動かすと、突然消えるのではなく、ディザが段階的に増減する自然な変化になります。
 - 実際のゲームでは、`detected` の判定を視線（物陰かどうか）や光の量など、別の条件に置き換えられます。
 
-### 7.4 確認ポイント
+### 7.4 シェーダーと C# をシーンで使う手順（全体像）
+
+7.2 のシェーダーと 7.3 の C# は、それぞれ**別の場所**で使います。まず役割を整理します。
+
+| 作ったもの | 使う場所 | 役割 |
+| :--- | :--- | :--- |
+| `Stealth08.shader` | **マテリアル**（`Stealth08_Mat`）に割り当て、そのマテリアルを Cube の **Mesh Renderer** に設定する | 見た目（ディザ・フレネル）を決める |
+| `StealthController.cs` | **Cube（ステルスさせたいオブジェクト）** に **Add Component** でアタッチする | 敵との距離から `_Visibility` を計算して、シェーダーへ値を渡す |
+| 敵役のオブジェクト | `StealthController` の **Enemy** 欄に指定する | 距離を測る対象。専用のコンポーネントは不要 |
+
+> 重要：Renderer Feature（5 章の輪郭線）とは違い、**ステルスのシェーダーは Renderer Data に登録しません。** 通常のマテリアルとして、描画したいオブジェクトに割り当てるだけです。
+
+```mermaid
+flowchart LR
+    S[Stealth08.shader] --> M[Stealth08_Mat<br/>マテリアル]
+    M --> R[Cube の Mesh Renderer<br/>Materials 欄]
+    C[StealthController.cs] --> G[Cube にアタッチ]
+    E[Sphere など敵役] --> F[Enemy 欄に指定]
+    G --> R
+    F --> C
+    C -->|MaterialPropertyBlock で _Visibility を送る| R
+```
+
+**手順 1：シーンを用意する**
+
+1. `Assets/ShaderProgramming/Chapter08/Chapter08.unity` を開く（なければ `Assets > Create > Scene` で作成する）
+2. 次のオブジェクトがなければ、Hierarchy の `+` から作成する
+   - `Main Camera`（Cube が映る位置に置く。例：Position `(0, 2, -6)`）
+   - `Directional Light`
+   - `Plane`（床。Position `(0, 0, 0)`）
+3. ステルスさせるオブジェクトとして、`3D Object > Cube` を作成し、名前を `StealthCube` に変更する。Position は `(0, 0.5, 0)` にする
+4. 敵役として、`3D Object > Sphere` を作成し、名前を `Enemy` に変更する。Position は `(5, 0.5, 0)` にする（Cube から 5 m 離れた位置）
+
+**手順 2：シェーダーからマテリアルを作る**
+
+1. Project ウィンドウで `Assets/ShaderProgramming/Chapter08/` を開く
+2. `Stealth08.shader` を右クリックし、`Create > Material` を選ぶ
+3. 作成されたマテリアルの名前を `Stealth08_Mat` に変更する
+4. Inspector の **Shader** 欄が `ShaderProgramming/Chapter8/Stealth08` になっていることを確認する
+5. 次の値を設定する
+
+| プロパティ | 値 | 意味 |
+| :--- | :--- | :--- |
+| Base Color | `(0.2, 0.3, 0.4)` | 本体の色 |
+| Rim Color | `(0.6, 0.9, 1.0)` | 縁の発光色 |
+| Rim Power | `3` | 大きいほど縁が細くなる |
+| Rim Visibility | `0.8` | 縁の見えやすさ |
+| Visibility | `1` | 本体の見えやすさ（C# が実行時に上書きする） |
+
+**手順 3：マテリアルを Cube に割り当てる**
+
+1. `Stealth08_Mat` を Hierarchy の `StealthCube`、または Scene ビューの Cube にドラッグ＆ドロップする
+2. `StealthCube` を選び、Inspector の **Mesh Renderer > Materials > Element 0** が `Stealth08_Mat` になっていることを確認する
+
+**手順 4：C# コンポーネントを Cube にアタッチする**
+
+1. Hierarchy で **`StealthCube`** を選ぶ（`Enemy` やカメラではない）
+2. Inspector の `Add Component` を押し、`StealthController` を検索して選ぶ。`StealthController.cs` を Inspector へドラッグ＆ドロップしてもよい
+3. 次のように設定する
+
+| 項目 | 設定 | 意味 |
+| :--- | :--- | :--- |
+| Enemy | Hierarchy の `Enemy` をドラッグして指定する | 距離を測る相手。**未設定だと常に隠れた状態**になる |
+| Detect Radius | `3` | この距離より近づくと、ステルスが解除される |
+| Hidden Visibility | `0.05` | 隠れているときの可視度。縁だけが薄く見える |
+| Fade Speed | `4` | 可視度が変わる速さ |
+
+> `StealthController` は `GetComponentsInChildren<Renderer>()` で Renderer を探します。そのため、**Renderer を持つオブジェクト自身、またはその親**にアタッチしてください。Renderer の無い空のオブジェクトにアタッチしても、子に Renderer があれば動きます。
+
+**手順 5：Play して確認する**
+
+1. Play を押す。`Enemy` は Cube から 5 m 離れているので、Cube は縁だけが薄く見える状態になる
+2. Play 中に Scene ビューで `Enemy` を Cube へ近づける（距離が `Detect Radius` の 3 未満になる位置）
+3. Cube のディザが減っていき、本体がはっきり見える
+4. `Enemy` を遠ざけると、再び本体が消えて縁だけが残る
+
+**手順 6：輪郭線と組み合わせる（任意）**
+
+5 章の `OutlineRendererFeature` が `PC_Renderer.asset` に登録されている場合、ステルス中の Cube も輪郭線の対象になります。深度テクスチャは Opaque のオブジェクトが書き込むため、ディザで抜けたピクセルには輪郭線は出ません。縁と輪郭線が重なる様子を観察してください。
+
+**うまく動かないとき**
+
+| 症状 | 確認すること |
+| :--- | :--- |
+| Cube がピンクになる | `Stealth08.shader` のコンパイルエラー。Project でシェーダーを選び、Inspector のエラーを確認する。マテリアルの Shader 欄が空でないことも確認する |
+| 常に縁だけで、近づいても本体が出ない | `Enemy` 欄が未設定、または `Detect Radius` が小さすぎる。Scene ビューで距離を確認する |
+| 近づいても遠ざけても変化しない | `StealthController` が Cube（Renderer を持つオブジェクト）にアタッチされているか。`_Visibility` の名前が C# とシェーダーで一致しているか |
+| Inspector で Visibility を変えても反映されない | 実行中は `StealthController` が `MaterialPropertyBlock` で上書きする。手動で試す場合は Play を止めるか、コンポーネントを無効にする |
+
+### 7.5 確認ポイント
 
 - 敵を遠ざけると、本体が段階的に消え、縁だけが残る
 - 敵に近づくと、ディザが減り、本体がはっきり見える

@@ -25,6 +25,7 @@ Shader "ShaderProgramming/Chapter8/OutlineFullscreen08"
 			#pragma vertex Vert
 			#pragma fragment Frag
 
+			#include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
 			// Blit 用の頂点シェーダーと _BlitTexture の宣言を取り込む
 			#include "Packages/com.unity.render-pipelines.core/Runtime/Utilities/Blit.hlsl"
 			// _CameraDepthTexture へのアクセス（SampleSceneDepth）を取り込む
@@ -76,6 +77,7 @@ Shader "ShaderProgramming/Chapter8/OutlineFullscreen08"
 				// 輪郭色を、マスクと輪郭色の α で重ねる
 				half3 result = lerp(src, _OutlineColor.rgb, mask * _OutlineColor.a);
 				return half4(result, 1.0h);
+				//return half4(mask.xxx, 1); 
 			}
 			ENDHLSL
 		}
