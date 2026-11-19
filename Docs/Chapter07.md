@@ -89,9 +89,10 @@ for (int areaNo = 0; areaNo < NUM_SHADOW_MAP; areaNo++)
 
 シャドウアクネは、シャドウマップの1テクセルが実際のシーン上である程度の面積を覆っているため、本来なめらかな斜面であってもテクセル単位で深度が離散化され、ピクセルの深度とわずかにズレてしまうことが原因です。特に、ライトに対してほぼ水平な面（法線とライト方向のなす角が大きい面）ほどこのズレが拡大しやすく、縞模様状のノイズとして現れます。
 
+
 以下に、バイアスなしの場合にシャドウアクネが発生する様子と、バイアスを適用して解消する様子を図解します。
 
-](images/shadow_acne.svg)
+![シャドウアクネとバイアス補正の関係](images/shadow_acne.svg)
 
 このイラストの左側のように、斜面自身がライトから見て「自分の少し手前にある自分自身」によって遮蔽されたと誤判定されるのがシャドウアクネです。これを数式で表すと、シャドウマップから読み取った深度を `shadowMapDepth`、比較対象となるピクセル自身のライト空間深度を `pixelDepth` としたとき、通常の深度比較は次のようになります。
 
@@ -119,7 +120,11 @@ URP では、シーンのレンダリングが始まると `ScriptableRenderer` 
 
 ### 3.2 URP のカスケード設定（Pipeline Asset の Shadows セクション）
 
-Universal Render Pipeline Asset
+Universal Render Pipeline Asset は、プロジェクトの `Project` ウィンドウ上でシーンに割り当てられているアセットを直接選択するか、`Edit > Project Settings > Graphics` の `Scriptable Render Pipeline Settings` に設定されているアセットをクリックすることで開けます（Quality レベルごとに個別の Pipeline Asset を割り当てている場合は、`Edit > Project Settings > Quality` の該当品質レベルの欄からも同じアセットを開けます）。
+
+![Img 639300901812124311](images/img_639300901812124311.png)
+
+アセットを選択すると Inspector に設定項目が表示され、その中の `Lighting` カテゴリにある `Shadows` セクションを開くと、Cascade Count・Depth Bias・Normal Bias などの項目が確認できます。本教材のワークスペースでは、`Assets/Settings/PC_RPAsset.asset` がこの Pipeline Asset に該当します。
 
 Pipeline Asset の Lighting > Shadows セクションには、主に次のような項目が並んでいます。
 
@@ -152,9 +157,10 @@ Shadow Resolution は、すべてのカスケード（および Additional Light
 
 Mesh Renderer コンポーネントの `Cast Shadows`（Off / On / Two Sided / Shadows Only）と `Receive Shadows` の各オプションが、ShadowCasterPass への参加可否とシェーダー内でのシャドウ減衰の適用可否にどう対応するかを解説します。
 
-> 注意: URP/Lit では `Receive Shadows` が `_RECEIVE_SHADOWS_OFF` キーワードとして反映されますが、自作シェーダーでは `#pragma shader_feature_local_fragment _RECEIVE_SHADOWS_OFF` を宣言し、キーワード有効時に `shadowAttenuation` を 1 にする処理を自分で書かない限り連動しません。`Shadow07.shader` では実装しないため、`Receive Shadows` の設定に関わらず影を受けます。
+`*Receive Shadows` は、かつての Unity（Unity 2021 以前や Built-in Render Pipeline）では `Mesh Renderer` コンポーネントの `Lighting` セクションに独立したチェックボックスとして表示されていましたが、現在の Unity（Unity 6 系を含む）の `Mesh Renderer` では、スクリーンショットの `Lighting` セクションにあるように `Cast Shadows` のみが表示され、`Receive Shadows` のチェックボックス自体が UI から廃止されています。これは機能が削除されたわけではなく、「影を受け取るかどうか」の制御が GameObject 側のトグルから、3.2 や 7.2 で扱ったシェーダー側の仕組みへ一本化されたためです。具体的には、シェーダーが `#pragma shader_feature_local_fragment _RECEIVE_SHADOWS_OFF` を宣言していれば、そのシェーダーを使うマテリアルの Inspector 上に `Receive Shadows` のチェックボックスが表示されるようになり、GameObject 単位ではなく「マテリアル単位」で影の受け取りを制御する形に変わっています（URP/Lit シェーダーはこのキーワードを宣言しているため、URP/Lit マテリアルの Inspector には今でも `Receive Shadows` が表示されます）。本章の `Shadow07.shader` ではこのキーワードを宣言していないため、7.1 の注記の通り、設定に関わらず常に影を受け取る実装になっています。*
 
-`Cast Shadows` を `Off` にしたオブジェクトは
+> 注意: URP/Lit では `Receive Shadows` が `_RECEIVE_SHADOWS_OFF` キーワードとして反映されますが、自作シェーダーでは `#pragma shader_feature_local_fragment _RECEIVE_SHADOWS_OFF` を宣言し、キーワード有効時に `shadowAttenuation` を 1 にする処理を自分で書かない限り連動しません。`Shadow07.shader` では実装しないため、`Receive Shadows` の設定に関わらず影を受けます.
+
 
 ### 4.2 Light コンポーネントのシャドウ設定
 
