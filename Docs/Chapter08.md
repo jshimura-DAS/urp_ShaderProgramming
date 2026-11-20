@@ -10,7 +10,7 @@
 
 ### 0.1 Unity 6.3 の仕様
 
-** 旧設定のシステムで実装を進めますが、プロジェクトの全体に影響するため、このChapter08はプロジェクトを別のものを用意して進めます。 ** 
+ **旧設定のシステムで実装を進めますが、プロジェクトの全体に影響するため、このChapter08はプロジェクトを別のものを用意して進めます。**  
 Unity 6.3 では Render Graph が既定で有効です。`Execute` だけを実装したパスは実行されず、警告が表示されます。さらに、Unity 6.3 では Graphics 設定に **Compatibility Mode（Render Graph Disabled）** のチェックボックスが表示されません。
 
 そのため、Compatibility Mode は次のスクリプト定義シンボル（Scripting Define Symbol）で有効にします。
