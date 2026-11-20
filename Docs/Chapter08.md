@@ -2,7 +2,7 @@
 
 この章は `URPシェーダープログラミングindex.md` の Chapter 08 に対応します。Chapter 07 までは「マテリアルのシェーダーで物体ごとの見た目を決める」ことを学んできました。この章では視点を一段上げ、**カメラ 1 台が 1 フレームを描く過程そのものに、自分の描画処理を差し込む**方法を学びます。その具体例として、画面全体に作用する輪郭線描画を実装し、続けて「半透明に見せるのに透明ブレンドを使わない」ディザリング透過と、それを応用したステルス表現を作ります。
 
-> この章のコードは、Compatibility Mode（`Execute` ベース）を前提にしています。Unity 6.3 では Render Graph が既定で有効なため、本章のパスは実行されません。**始める前に 0 章の手順で `URP_COMPATIBILITY_MODE` を設定してください。** Render Graph（`RecordRenderGraph`）版への移行は 5.8 で概要だけ扱います。
+> この章のコードは、Compatibility Mode（`Execute` ベース）を前提にしています。Unity 6.3 では Render Graph が既定で有効なため、本章のパスは実行されません。**始める前に 0 章の手順で `URP_COMPATIBILITY_MODE` を設定した新規プロジェクトを作成してください。** Render Graph（`RecordRenderGraph`）版への移行は 5.8 で概要だけ扱います。
 
 ---
 
@@ -10,6 +10,7 @@
 
 ### 0.1 Unity 6.3 の仕様
 
+** 旧設定のシステムで実装を進めますが、プロジェクトの全体に影響するため、このChapter08はプロジェクトを別のものを用意して進めます。 ** 
 Unity 6.3 では Render Graph が既定で有効です。`Execute` だけを実装したパスは実行されず、警告が表示されます。さらに、Unity 6.3 では Graphics 設定に **Compatibility Mode（Render Graph Disabled）** のチェックボックスが表示されません。
 
 そのため、Compatibility Mode は次のスクリプト定義シンボル（Scripting Define Symbol）で有効にします。
