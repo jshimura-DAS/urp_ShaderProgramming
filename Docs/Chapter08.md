@@ -180,14 +180,63 @@ flowchart TD
 
 本プロジェクトでは次の対応になっています。
 
-| 階層 | 本プロジェクトのアセット・クラス |
-| :--- | :--- |
-| RenderPipelineAsset | `Assets/Settings/PC_RPAsset.asset`（`UniversalRenderPipelineAsset`） |
-| Renderer Data | `Assets/Settings/PC_Renderer.asset`（`UniversalRendererData`） |
-| 全体設定 | `Assets/Settings/UniversalRenderPipelineGlobalSettings.asset` |
-| Renderer Feature | Renderer Data の Inspector に追加する C# コンポーネント |
+### 3.1 Render パイプラインの階層と本プロジェクトのアセット対応
 
-Chapter 07 で扱った Pipeline Asset の Shadows 設定は `RenderPipelineAsset` の項目であり、Renderer Data は「どの描画パスを、どの順で実行するか」を決める項目です。両者を混同しないようにしてください。
+- **RenderPipelineAsset**（`Assets/Settings/PC_RPAsset.asset` / `UniversalRenderPipelineAsset`）
+  - 役割：カメラ全体に共通する描画の基本設定を持つ。影の品質、追加ライト、深度・カラーテクスチャの生成などを決める。
+  - 定義されている主な内容：
+    - Renderer Data の参照（`PC_Renderer`）
+    - Depth Texture / Opaque Texture の要否（いずれも有効）
+    - Main Light と Additional Lights の影の解像度、Shadow Distance、Cascade Count（4）、Depth Bias（0.1）、Normal Bias（0.5）、Soft Shadow 品質
+    - Additional Lights の上限（Per Object Limit 4）
+    - HDR、MSAA、Render Scale、SRP Batcher（有効）
+    - Volume Profile（`SampleSceneProfile.asset`）の参照
+  - カスタマイズ方法：
+    - Inspector で各項目を直接変更する。
+    - Quality 設定ごとに別のアセットを割り当てることもできる（Edit > Project Settings > Quality）。
+    - Graphics 設定の Default Render Pipeline に割り当てる。
+
+- **Renderer Data**（`Assets/Settings/PC_Renderer.asset` / `UniversalRendererData`）
+  - 役割：カメラが描画を組み立てる際のパスの順序と構成を決める。Renderer Feature の登録先。
+  - 定義されている主な内容：
+    - Renderer Feature の一覧（ScreenSpaceAmbientOcclusion、`OutlineRendererFeature`、`WipeRendererFeature`）
+    - Rendering Mode（値 2 = Forward+）
+    - Depth Priming、Copy Depth Mode、Native RenderPass の有無
+    - Post Process Data（`PostProcessData` の参照）
+    - Default Stencil State、Shadow Transparent Receive
+    - デバッグ用シェーダー（Debug Shaders、Probe Volume 関連）
+  - カスタマイズ方法：
+    - Inspector で Rendering Mode やその他の項目を変更する。
+    - Add Renderer Feature で Feature を追加、削除、並べ替えする。
+    - Feature の Render Pass Event や Shader などは、各 Feature の項目で変更する。
+
+- **全体設定**（`Assets/Settings/UniversalRenderPipelineGlobalSettings.asset` / `UniversalRenderPipelineGlobalSettings`）
+  - 役割：プロジェクト全体で共有する設定と、URP が使う内部シェーダー・テクスチャの参照をまとめる。
+  - 定義されている主な内容：
+    - Shader Stripping（Export Shader Variants、Strip Unused Variants などが有効）
+    - Rendering Layer 名（Light Layer default、Light Layer 1〜7）
+    - Default Volume Profile（`DefaultVolumeProfile.asset`）の参照
+    - Blit、Post Processing、SSAO、Probe Volume、XR などの内部シェーダーとテクスチャの参照
+    - Render Graph 関連の設定
+  - カスタマイズ方法：
+    - Edit > Project Settings > Graphics を開いて変更する。
+    - Rendering Layer 名は同画面で編集する。
+    - 内部シェーダーの差し替えは参照先を変更して行う（通常は変更しない）。
+
+- **Renderer Feature**（`PC_Renderer.asset` 内に登録 / `OutlineRendererFeature`、`WipeRendererFeature` など）
+  - 役割：Renderer に独自の描画パスを挿入する。第 8・9 章で作成したパスを登録する。
+  - 定義されている主な内容：
+    - Render Pass Event（挿入位置）
+    - Shader（対応するフルスクリーンシェーダー）
+    - 輪郭線の場合は Outline Color、Threshold、Sharpness、Thickness
+    - ワイプの場合は Mode（Iris / Horizontal）、Wipe Color、Edge Color、Edge Width、Softness
+    - ワイプの進行度 `Progress` は C# の static 変数で、`WipeController` から制御する
+  - カスタマイズ方法：
+    - Renderer Data の Inspector で Feature 項目の値を変更する。
+    - C# の `Settings` クラスの既定値を変えると、新規追加時の初期値に反映される。
+    - 既存の登録には反映されないため、値は Inspector で直接変更する。
+
+**補足**：`UniversalRenderPipelineGlobalSettings.asset` の `m_EnableRenderGraph` の値は `0` です。Render Graph の有効・無効は、Graphics 設定と Compatibility Mode の設定（0.1〜0.3）の状態を合わせて確認してください。
 
 ### 3.2 DirectX 12 との対応
 
