@@ -2,15 +2,18 @@
 
 この章は `URPシェーダープログラミングindex.md` の Chapter 08 に対応します。Chapter 07 までは「マテリアルのシェーダーで物体ごとの見た目を決める」ことを学んできました。この章では視点を一段上げ、**カメラ 1 台が 1 フレームを描く過程そのものに、自分の描画処理を差し込む**方法を学びます。その具体例として、画面全体に作用する輪郭線描画を実装し、続けて「半透明に見せるのに透明ブレンドを使わない」ディザリング透過と、それを応用したステルス表現を作ります。
 
-> この章のコードは、Compatibility Mode（`Execute` ベース）を前提にしています。Unity 6.3 では Render Graph が既定で有効なため、本章のパスは実行されません。**始める前に 0 章の手順で `URP_COMPATIBILITY_MODE` を設定した新規プロジェクトを作成してください。** Render Graph（`RecordRenderGraph`）版への移行は 5.8 で概要だけ扱います。
+> この章のコードは、Compatibility Mode（`Execute` ベース）を前提にしています。Unity 6.3 では Render Graph が既定で有効なため、本章のパスは実行されません。**始める前に 0 章の手順で `URP_COMPATIBILITY_MODE` を設定してください。** Render Graph（`RecordRenderGraph`）版への移行は 5.8 で概要だけ扱います。
 
 ---
 
 ## 0. 事前準備：Compatibility Mode（Execute 方式）を有効にする
 
+この章では、Unity 6.3 以降でデフォルトになった Render Graph ではなく、従来の Execute 方式で描画パスを組み立てる Compatibility Mode を使います。Compatibility Mode は Unity 6.4 で削除される予定のため、教材の作業環境としてのみ使ってください。このChapter08のコードは、Unity 6.3 以降では Compatibility Mode を有効にしないと動作しません。そのため、**設定を変えるとProject全体の他のSceneにも影響が出ます**。次の手順で Compatibility Mode を有効にしてください。
+
+**別のプロジェクトを新規作成して独立させることを推奨します**
+
 ### 0.1 Unity 6.3 の仕様
 
- **旧設定のシステムで実装を進めますが、プロジェクトの全体に影響するため、このChapter08はプロジェクトを別のものを用意して進めます。**  
 Unity 6.3 では Render Graph が既定で有効です。`Execute` だけを実装したパスは実行されず、警告が表示されます。さらに、Unity 6.3 では Graphics 設定に **Compatibility Mode（Render Graph Disabled）** のチェックボックスが表示されません。
 
 そのため、Compatibility Mode は次のスクリプト定義シンボル（Scripting Define Symbol）で有効にします。
@@ -234,6 +237,8 @@ flowchart TD
 
 ### 4.2 RenderPassEvent の主な挿入位置
 
+現状のレンダリングのパイプラインに対して、どの位置に自分のパスを挿入するかを `RenderPassEvent` で指定します。
+
 `RenderPassEvent` は、標準パスとの相対位置を指定します。主な値を挙げます。
 
 | 値 | 挿入位置 |
@@ -277,7 +282,8 @@ public class EmptyRendererFeature : ScriptableRendererFeature
 
         public override void Execute(ScriptableRenderContext context, ref RenderingData renderingData)
         {
-            // CommandBuffer を借りて命令を記録し、最後に実行する
+            Debug.Log("EmptyPass08 executed");   // 確認後に削除してよい
+			// CommandBuffer を借りて命令を記録し、最後に実行する
             CommandBuffer cmd = CommandBufferPool.Get();
             using (new ProfilingScope(cmd, s_Sampler))
             {
@@ -314,6 +320,7 @@ public class EmptyRendererFeature : ScriptableRendererFeature
 
 1. Project ウィンドウで `Assets/ShaderProgramming/Chapter08/EmptyRendererFeature.cs` が存在することを確認する（ファイル名がクラス名と一致しているか確認する）
 2. Project ウィンドウの検索欄や `Assets/Settings/` を開き、`PC_Renderer.asset` をクリックして選択する
+![](images/SS_Select_PCrenderer.png)
 3. Inspector に `PC_Renderer` の設定が表示されるので、一番下付近の **Add Renderer Feature** ボタンを押す
 4. 表示されたメニューから **EmptyRendererFeature** を選ぶ（一覧に出ない場合は手順 1 のファイル名を確認する）
 5. Inspector に `Empty Renderer Feature` の項目が追加されたことを確認する
@@ -324,11 +331,7 @@ public class EmptyRendererFeature : ScriptableRendererFeature
 
 ### 4.5 Frame Debugger での確認
 
-`Window > Analysis > Frame Debugger` を開き、Enable を押すと、1 フレームの描画がパス単位で一覧されます。独自パスは `ProfilingSampler` に指定した名前（例：`Outline08`）で表示されるため、次の点を確認します。
-
-- 指定した `RenderPassEvent` の位置に表示されているか
-- 入力テクスチャ（深度・カラー）が意図どおりか
-- 描画回数が想定どおりか（Feature を複数追加していないか）
+コンソール上で `EmptyPass08 executed` が出ていれば、パスは実行されています。さらに、有効なPassであれば、`Window > Analysis > Frame Debugger` を開き、Enable を押すと、1 フレームの描画がパス単位で一覧されます。今回はEmptyのため、描画は行われません。
 
 ### 4.6 SRP Batcher との関係
 

@@ -16,6 +16,8 @@ public class EmptyRendererFeature : ScriptableRendererFeature
 
         public override void Execute(ScriptableRenderContext context, ref RenderingData renderingData)
         {
+            // Debug.Log("EmptyPass08 executed");   // 確認後に削除してよい
+
             // CommandBuffer を借りて命令を記録し、最後に実行する
             CommandBuffer cmd = CommandBufferPool.Get();
             using (new ProfilingScope(cmd, s_Sampler))
